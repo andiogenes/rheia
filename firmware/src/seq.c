@@ -1578,8 +1578,15 @@ static void arp_remove(track_t *t, uint32_t note)
  * one); WALK a random step up or down the list (bouncing off its ends); REPEAT the last note played, again and again;
  * CHORD all the held notes together (the first 4), an octave higher each step through OCT. ORD (Felucca 1.4) always
  * plays the notes in the order they were pressed (up to 2.6 it played as UP unless ARP 2 ORD was PLAY) */
+/* (Rheia) TREM: tremolo picking. Every step picks the held notes again together (the first 4, no octaves: OCT is for the
+ * other modes), alternating a hard down-stroke and a softer up-stroke (velocity 112 / 84) with a little of a hand's
+ * unevenness (+-8). RATE is the picking speed (1/16, 1/32, the triplets), GATE how choppy, SWG the swing as ever: a
+ * held chord on a detuned pad becomes a black-metal tremolo wall */
 enum { AM_OFF, AM_UP, AM_DN, AM_UPDN, AM_RND, AM_ORD, AM_REPEAT, AM_DNUP, AM_UP8, AM_CONV, AM_DIVG, AM_PINKY,
-       AM_THUMB, AM_WALK, AM_CHORD };
+       AM_THUMB, AM_WALK, AM_CHORD, AM_TREM };
+#define TREM_DOWN 112u
+#define TREM_UP 84u
+#define TREM_JIT 8u
 
 /* the arp's note list (its length returned, 0: nothing to play; up to 64, + 1 for UP+8): the held notes as they play
  * now (#191), each once (*cnt of them), sorted or as played, over OCT octaves */
@@ -1679,14 +1686,15 @@ static void arp_end(track_t *t)
     }
 }
 
-/* an arp note starts (recorded while recording: what you hear) */
-static void arp_play(track_t *t, uint32_t n)
+/* an arp note starts (recorded while recording: what you hear); (Rheia) at a velocity, TREM's strokes */
+static void arp_play_v(track_t *t, uint32_t n, uint32_t vel)
 {
-    trk_note_on(t, n, 100);
-    seq_out_on(t, n, 100);
+    trk_note_on(t, n, vel);
+    seq_out_on(t, n, vel);
     if (((song.rec >> trk_index(t)) & 1u) && song.playing)
-        rec_note(t, n, 100, 0, 0);
+        rec_note(t, n, vel, 0, 0);
 }
+static void arp_play(track_t *t, uint32_t n) { arp_play_v(t, n, 100); }
 
 /* an arp step: the next note of the list by MODE, or (CHORD) the first 4 notes together, OCT octaves in turn. 1: it
  * plays (arp_note set), 0: nothing to play */
@@ -1696,9 +1704,20 @@ static int arp_step(track_t *t)
     if (!len)
         return 0;
     t->arp_idx++;
-    if (t->p[P_AMODE] != AM_CHORD) {
+    if (t->p[P_AMODE] != AM_CHORD && t->p[P_AMODE] != AM_TREM) {
         t->arp_note = (uint8_t)list[arp_pick(t, list, len)];
         arp_play(t, t->arp_note);
+        return 1;
+    }
+    if (t->p[P_AMODE] == AM_TREM) {                 /* (Rheia) TREM: the chord again, down / up strokes */
+        uint32_t vel = ((t->arp_idx & 1u) ? TREM_UP : TREM_DOWN) + rng() % (2u * TREM_JIT + 1u) - TREM_JIT;
+        for (i = 0; i < cnt && i < 4u; i++) {
+            if (!t->arp_note)
+                t->arp_note = (uint8_t)list[i];
+            else
+                t->arp_ch[i - 1u] = (uint8_t)list[i];
+            arp_play_v(t, list[i], vel);
+        }
         return 1;
     }
     o = t->arp_idx % (uint32_t)(t->p[P_AOCT] > 0 ? t->p[P_AOCT] : 1);

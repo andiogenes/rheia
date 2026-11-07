@@ -169,7 +169,7 @@ static void arp_modes_test(void)
     memset(trk, 0, sizeof trk);
     memset(&song, 0, sizeof song);
     host_tracks_init();
-    assert(TP[P_AMODE].max == AM_CHORD);
+    assert(TP[P_AMODE].max == AM_TREM);                 /* (Rheia: TREM after CHORD) */
     t->p[P_AOCT] = 1, t->p[P_AORDER] = 0, t->p[P_AHOLD] = 0;
     memset(held_key, 0, sizeof held_key);          /* (MIDI notes: played as they are) */
     t->held[0] = 67, t->held[1] = 60, t->held[2] = 64, t->nheld = 3;   /* pressed G, C, E */
@@ -201,6 +201,45 @@ static void arp_modes_test(void)
     assert(!arp_step(t) && !t->arp_note);
     t->p[P_AMODE] = 0, t->p[P_AOCT] = 1;
     puts("arp: the 2.7 modes (Felucca 1.5.1): DNUP UP+8 CONV DIVG PINKY THUMB WALK REPEAT CHORD, ORD as pressed ok");
+}
+
+/* (Rheia) TREM: every step the held notes together (no octaves, whatever OCT), a hard down-stroke then a softer up-stroke,
+ * each within +-TREM_JIT; let go: nothing more */
+static uint32_t voice_vel(const track_t *t, uint32_t note)   /* the newest voice on note: its velocity, 0 none */
+{
+    uint32_t k, v = 0, best = 0;
+    for (k = 0; k < NVOICE; k++)
+        if (t->v[k].active && t->v[k].note == note && t->v[k].vel)
+            v = t->v[k].vel, best++;
+    (void)best;
+    return v;
+}
+static void arp_trem_test(void)
+{
+    track_t *t = &trk[0];
+    uint32_t i, ok_notes = 1, ok_vel = 1;
+    memset(trk, 0, sizeof trk);
+    memset(&song, 0, sizeof song);
+    host_tracks_init();
+    memset(held_key, 0, sizeof held_key);
+    t->p[P_AMODE] = AM_TREM, t->p[P_AOCT] = 2, t->p[P_AORDER] = 0;
+    t->held[0] = 67, t->held[1] = 60, t->held[2] = 64, t->nheld = 3;   /* pressed G, C, E */
+    t->arp_idx = 0xFFFFFFFFu;
+    for (i = 0; i < 8u; i++) {
+        uint32_t v, want;
+        assert(arp_step(t));
+        ok_notes &= t->arp_note == 60 && t->arp_ch[0] == 64 && t->arp_ch[1] == 67 && !t->arp_ch[2];
+        want = (i & 1u) ? TREM_UP : TREM_DOWN;
+        v = voice_vel(t, 60);
+        ok_vel &= v + TREM_JIT >= want && v <= want + TREM_JIT;
+        arp_end(t);
+    }
+    assert(ok_notes);                                /* the chord each step, OCT 2 not used */
+    assert(ok_vel);                                  /* down 112, up 84, +-8 */
+    t->nheld = 0;
+    assert(!arp_step(t) && !t->arp_note);
+    t->p[P_AMODE] = 0, t->p[P_AOCT] = 1;
+    puts("arp: (Rheia) TREM: the chord every step, no octaves, down / up strokes +-8, let go: silent ok");
 }
 
 /* 2.7 (#52): ARP SWG with the transport stopped: the odd steps late by SWG, the even ones back on the grid */
@@ -395,6 +434,7 @@ int main(void)
     mapping_test();
     key_events_test();
     arp_modes_test();
+    arp_trem_test();
     arp_swing_test();
     clkout_test();
     kbd_hold_test();
