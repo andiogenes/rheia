@@ -30,6 +30,16 @@ static double play(uint32_t e, uint32_t p, uint32_t mode, uint32_t note)
         for (any = 0, i = 0; i < NVOICE; i++)
             any |= trk[0].v[i].active;
     }
+    /* (Rheia) every render from the same start: the voices cleared (their oscillators' phases, which a note keeps from
+     * the one before) and the random numbers from this render's own seed (engine, preset, note). Before, a render began
+     * where all the renders before it had left the voices and voice.c's unison draws: adding presets to ANALOG and TRIO
+     * moved DIGITAL FM PLUCK's draw to one that stacks (+8.7 dB at note 60; over 200 random starts: mean +0.4 dB, 4 over
+     * +8) */
+    memset(trk[0].v, 0, sizeof trk[0].v);
+    rng_state = (e * 64u + p + 1u) * 0x9E3779B9u ^ note * 0x85EBCA6Bu;
+    if (!rng_state)
+        rng_state = 1;
+    uni_seed[0] = 0x1234567u, uni_seed[1] = 0x13579BDu;   /* (voice.c: the unison phases' own draws, from their start) */
     for (i = 0; i < P_E0; i++)                       /* the preset as ui.c apply_preset_to loads it */
         trk[0].p[i] = TP[i].def;
     host_preset(&trk[0], e, p);

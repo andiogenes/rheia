@@ -358,6 +358,9 @@ static void voice_start(track_t *t, voice_t *v, uint32_t note, uint32_t vel, int
 
 /* a UNISON voice's start phases moved by r (Q32: a turn of its note), as if it had started that much of a period
  * sooner: in phase the voices stack, spread they sum as noise */
+/* the unison voices' random start phases: two sequences (a voice started at once, one a sample's fade delayed). At file
+ * scope (Rheia; they were function statics, the same values): a test can start every render from the same draw */
+static uint32_t uni_seed[2] = {0x1234567u, 0x13579BDu};
 static void unison_spread(track_t *t, voice_t *v, uint32_t r)
 {
     const engine_t *e = ENGINES[t->engine];
@@ -405,9 +408,8 @@ static void mono_play(track_t *t, uint32_t note, uint32_t vel, int retrig, int g
             /* level: about the same sum for 8 or 4 voices at random phases */
             voice_start(t, v, note, nv >= NVOICE ? vel * 36u / 100u : nv > 1u ? vel / 2u : vel, glide);
             if (nv > 1u && i && !was_sounding) {   /* random start phases (SAMPLE: its start; not SLICE): */
-                static uint32_t seed = 0x1234567u;          /* in phase they stack, evenly spread they cancel */
-                seed = seed * 1664525u + 1013904223u;
-                unison_spread(t, v, seed);
+                uint32_t seed = uni_seed[0] = uni_seed[0] * 1664525u + 1013904223u;   /* in phase they stack, evenly */
+                unison_spread(t, v, seed);                                           /* spread they cancel */
             } else if (nv > 1u && i && (v->pend & VP_ON))
                 v->pend |= VP_UNI;                          /* (a sample's, after its fade: spread as it starts) */
         } else {                                            /* legato: new pitch, same envelope */
@@ -808,8 +810,7 @@ static uint32_t track_render(track_t *t, int32_t *out, uint32_t n)
             if (voice_room(t, 0)) {                     /* (it was not counted while fading: within the budget) */
                 voice_start(t, v, v->pend_note, v->pend_vel, (pf & VP_GLIDE) != 0);
                 if (pf & VP_UNI) {                      /* (after Clipper 1.2) UNISON: not in phase with the others */
-                    static uint32_t seed = 0x13579BDu;
-                    seed = seed * 1664525u + 1013904223u;
+                    uint32_t seed = uni_seed[1] = uni_seed[1] * 1664525u + 1013904223u;
                     unison_spread(t, v, seed);
                 }
                 if (pf & VP_OFF) {                      /* let go within the fade (~1.5 ms): released as it starts */
