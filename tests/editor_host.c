@@ -138,6 +138,7 @@ static int st_erase(uint32_t off) { uint32_t took; if (!FL_STORE_OK(off, 0x1000u
 static int st_prog(uint32_t off, const void *src, uint32_t n) { if (!FL_STORE_OK(off, n)) return -8; return fl_write(off, src, n); }
 #include "../firmware/src/storage.c"
 #include "../firmware/src/upreset.c"
+#include "fm1_flash_id.h"                /* FL_JEDEC_OK, which project.c uses since SLOOP 2.8.5 */
 #include "../firmware/src/project.c"
 /* ---- the ota hooks usb.c needs (felucca.c) */
 static uint32_t ota_now_ms(void) { return fm1_ms; }

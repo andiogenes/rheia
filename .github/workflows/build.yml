@@ -89,8 +89,7 @@ jobs:
           node tests/emu_test.mjs build/emu/rheia-emu.wasm
           python3 tests/site_test.py
 
-      - name: The full SLOOP host suite (informational)
-        continue-on-error: true
+      - name: The full host suite (SLOOP's tests and Rheia's)
         run: |
           cp "build/felucca-$RHEIA_VERSION.fwsc" build/felucca.fwsc   # (the suite reads the package by this name)
           sh tests/run_tests.sh
