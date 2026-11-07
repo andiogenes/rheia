@@ -45,6 +45,9 @@ run "application USB recovery and boot-loop guard" "$OUT/recovery_test"
 $CC -Ifirmware/src -o "$OUT/beatgen_test" tests/beatgen_test.c
 run "Rheia BEAT GEN: styles, options, lengths, fills, humanise, seeds" "$OUT/beatgen_test"
 
+$CC -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o "$OUT/wall_test" tests/wall_test.c -lm
+run "Rheia WALL: BUZZ SLAB SHRED bounded, level-matched, their character, the gate, dry when off" "$OUT/wall_test" "$OUT"
+
 $CC -o "$OUT/arranger_test" tests/arranger_test.c
 run "song order, timing, repeats and missing scenes" "$OUT/arranger_test"
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/song_audio_test" tests/song_audio_test.c -lm

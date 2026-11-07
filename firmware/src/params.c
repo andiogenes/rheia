@@ -29,7 +29,8 @@ static const uint16_t ESYNC_UNITS[ESYNC_N] = {0, 4, 6, 8, 9, 12, 16, 18, 24, 32,
                                               96, 128, 144, 192, 256, 288, 384, 576, 768, 1152, 1536};
 static uint32_t esync_idx(int32_t v) { return (uint32_t)(v & 127) * ESYNC_N >> 7; }   /* (param_format's split) */
 /* the INSERT's types (fx.c IT_*; append-only: stored). Its three values A B C mean what the type says (ins_desc) */
-static const char *const N_ITYPE[] = {"OFF", "SOFT", "HARD", "FOLD", "FUZZ", "CRUSH", "PHASR", "FLANG", "CHOR"};
+static const char *const N_ITYPE[] = {"OFF", "SOFT", "HARD", "FOLD", "FUZZ", "CRUSH", "PHASR", "FLANG", "CHOR",
+                                      "BUZZ", "SLAB", "SHRED"};   /* (Rheia: WALL, fx.c ins_wall) */
 /* CRUSH: BITS 1..16 and RATE (the held sample's rate) over the range in 16 even parts (0-terminated) */
 static const char *const N_IBITS[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
                                       "16", 0};
@@ -210,17 +211,19 @@ static const param_desc_t DRUM_KIT_DESC = PE("KIT", DRUM_KIT_NAMES, 0);
 /* the INSERT's A B C as its TYPE means them (TP's ranges and defaults): the drives DRIVE TONE LEVEL, CRUSH BITS RATE
  * LPF, the swept ones RATE DEPTH FDBK; OFF TP's own */
 #define PU(l, f, df, n, u) {l, f, 0, 127, df, n, u}
-static const param_desc_t INS_DESC[3][3] = {
+static const param_desc_t INS_DESC[4][3] = {
     {PU("DRIVE", F_PCT, 64, 0, 0), PU("TONE", F_CUTOFF, 96, 0, 0), PU("LEVEL", F_DB, 96, 0, 0)},
     {PU("BITS", F_INT, 64, N_IBITS, 0), PU("RATE", F_INT, 96, N_IRATE, "Hz"), PU("LPF", F_CUTOFF, 96, 0, 0)},
     {PU("RATE", F_LFOHZ, 64, 0, 0), PU("DEPTH", F_PCT, 96, 0, 0), PU("FDBK", F_PCT, 96, 0, 0)},
+    {PU("DRIVE", F_PCT, 80, 0, 0), PU("TONE", F_CUTOFF, 92, 0, 0), PU("GATE", F_PCT, 24, 0, 0)},   /* (Rheia) WALL */
 };
 #undef PU
 static const param_desc_t *ins_desc(int32_t type, uint32_t k)
 {
     if (type <= 0 || type >= (int32_t)NELEM(N_ITYPE))
         return &TP[P_IA + k];
-    return &INS_DESC[type < 5 ? 0 : type == 5 ? 1 : 2][k % 3u];   /* (SOFT .. FUZZ, CRUSH, the swept ones) */
+    return &INS_DESC[type < 5 ? 0 : type == 5 ? 1 : type < 9 ? 2 : 3][k % 3u];   /* (SOFT .. FUZZ, CRUSH, the swept ones,
+                                                                         * Rheia's WALL: BUZZ SLAB SHRED, 9..11) */
 }
 static const param_desc_t ESYNC_DESC[3] = {   /* ATK DEC REL with ENV SYNC on: the range and defaults as ever */
     {"ATK", F_INT, 0, 127, 10, ESYNC_NAMES, 0},

@@ -83,12 +83,14 @@ jobs:
           python3 tools/build_preview.py
           python3 tools/build_emu.py
 
-      - name: Tests (BEAT GEN, the UI, the emulator, the site)
+      - name: Tests (BEAT GEN, WALL, the UI, the emulator, the site)
         run: |
           mkdir -p build/host/ui
           CC="cc -O1 -Wall -Wno-unused-function"
           $CC -Ifirmware/src -o build/host/beatgen_test tests/beatgen_test.c
           build/host/beatgen_test
+          cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o build/host/wall_test tests/wall_test.c -lm
+          build/host/wall_test build/host
           cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o build/host/ui_pages_test tests/ui_pages_test.c -lm
           build/host/ui_pages_test build/host/ui
           node tests/emu_test.mjs build/emu/rheia-emu.wasm

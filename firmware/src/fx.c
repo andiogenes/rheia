@@ -445,7 +445,9 @@ static void tflt_run(djf_t *f, const tsvf_t *c, int32_t *b, uint32_t n, uint32_t
  * fades the new one in; so does a start from MIX 0 (no stale line or filter).
  * The drum track (SLOOP): its left, right, reverb send and delay send each through their own state, the same settings
  * (fx.c mix_block). State in RAM (.bss): 580 B a channel; noinline, its own loops */
-enum { IT_OFF, IT_SOFT, IT_HARD, IT_FOLD, IT_FUZZ, IT_CRUSH, IT_PHASER, IT_FLANGER, IT_CHORUS, IT_N };
+enum { IT_OFF, IT_SOFT, IT_HARD, IT_FOLD, IT_FUZZ, IT_CRUSH, IT_PHASER, IT_FLANGER, IT_CHORUS,
+       IT_BUZZ, IT_SLAB, IT_SHRED, IT_N };      /* (Rheia: WALL, ins_wall; appended: the stores keep the numbers) */
+_Static_assert(IT_BUZZ == 9, "params.c ins_desc: WALL is 9..11");
 _Static_assert(IT_N == sizeof N_ITYPE / sizeof N_ITYPE[0], "the INSERT's types as params.c names them");
 #define IL_LEN 256u                     /* FLANG / CHOR: the line, samples (a power of 2: masked) */
 #define PH_ST 4u                        /* PHASR: all-pass stages (two notches, the classic pedal's) */
@@ -464,6 +466,9 @@ typedef struct {
     uint32_t ph;                        /* the sweep's phase */
     int32_t hp, lp1, lp2, dc, hold;     /* low cut (Q8), the two low-passes, DC blocker (Q8), CRUSH's held sample */
     int32_t px[PH_ST], py[PH_ST], fb;   /* PHASR: each stage's last input and output, the fed back */
+    int32_t pre, env, gg;               /* (Rheia) WALL: the pre-EQ's low-pass, the gate's envelope and gain (Q15) */
+    uint8_t gopen;                      /* (Rheia) WALL: the gate is open */
+    uint16_t ghold;                     /* (Rheia) WALL: samples it stays open after the envelope fell */
     int16_t line[IL_LEN];               /* FLANG / CHOR, at a quarter (headroom) */
 } ins_t;
 /* (in .bss, not the pool: tools/build.py keeps 8 KiB of the pool spare; RAM has room) */
@@ -618,6 +623,88 @@ static __attribute__((noinline)) void ins_swept(ins_t *s, const int16_t *p, int3
     s->dc = dc;
 }
 
+/* (Rheia) WALL: three amp-like voicings for heavy music, each low cut -> pre-EQ -> DRIVE -> its shaper -> TONE -> a fixed
+ * level -> noise GATE -> DC blocker. A B C: DRIVE (1x .. ~64x, squared), TONE (two one-pole low-passes, F_CUTOFF), GATE
+ * (0 off .. a threshold up to about -20 dB of a voice's full scale; it listens to the INSERT's input, so a stop is a stop
+ * however hard the drive: opens at once, closes some 20 .. 40 ms after the input falls under half the threshold).
+ *   BUZZ   thin and fizzy (black metal): a high low cut (~220 Hz), the highs pushed before the drive, a soft clip into a
+ *          hard one: square-ish, bright;
+ *   SLAB   thick and compressed (Godflesh, Chat Pile): a low low cut (~55 Hz), the lows kept, a biased soft clip (even
+ *          harmonics) into a second soft clip: dense, round;
+ *   SHRED  harsh and gated (grind, The Locust): a mid low cut (~110 Hz), FUZZ's lopsided clip plus an octave up (the
+ *          rectified wave, the louder part), hard-limited: spitty, ringing. */
+static const struct { uint8_t hp_sh, pre_sh; int16_t emph, lvl; } WALL_V[3] = {
+    {5, 3, 768, 1500},                  /* BUZZ: low cut 1/32 (~220 Hz), pre-EQ +3 x the part above ~880 Hz */
+    {7, 3, 64, 2400},                   /* SLAB: low cut 1/128 (~55 Hz), +0.25 */
+    {6, 3, 204, 3600},                  /* SHRED: low cut 1/64 (~110 Hz), +0.8 */
+};
+/* v: a voice's full scale 32768, driven; off: SLAB's offset (a share of the driven envelope, so the wave crosses its
+ * clip off-centre at any level: the halves differ in width, the even harmonics; 0 in silence); SHRED's octave (the
+ * rectified wave before the drive: a squared wave rectified would be flat) */
+static inline int32_t wall_shape(uint32_t ty, int32_t v, int32_t off)
+{
+    int32_t u;
+    switch (ty) {
+    case IT_BUZZ:
+        u = softclip(v);
+        return clamp(u * 2, -22000, 22000);
+    case IT_SLAB:                                       /* off-centre soft clip, then a second (compression) */
+        u = softclip(v + off) - softclip(off);
+        return (softclip(u + (u >> 1)) * 3) >> 2;
+    default: {                                          /* SHRED */
+        int32_t f = v > 0 ? (v > 18000 ? 18000 : v) : softclip(v) >> 1;
+        return clamp((f >> 1) + (off > 16000 ? 16000 : off), -24000, 24000);   /* the octave with half the fuzz (its
+                                                         * DC: the blocker after) */
+    }
+    }
+}
+static __attribute__((noinline)) void ins_wall(ins_t *s, const int16_t *p, int32_t *b, uint32_t n, int32_t tw)
+{
+    uint32_t i, ty = s->type, vi = (ty - IT_BUZZ) % 3u;
+    int32_t a = clamp(p[P_IA], 0, 127), g8 = 256 + a * a;      /* DRIVE, Q8: 1x .. 64x */
+    int32_t c = clamp(p[P_IC], 0, 127), thr = c * c / 5;       /* GATE: 0 .. 3225 (about -20 dB) */
+    uint32_t k = (uint32_t)ins_lpk(p[P_IB]), hs = WALL_V[vi].hp_sh, pk = WALL_V[vi].pre_sh;
+
+    int32_t emph = WALL_V[vi].emph, lvl = WALL_V[vi].lvl;
+    int32_t w = s->w, lp1 = s->lp1, lp2 = s->lp2, hp = s->hp, dc = s->dc, pre = s->pre, env = s->env, gg = s->gg;
+    uint32_t open = s->gopen, hold = s->ghold;
+    for (i = 0; i < n; i++) {
+        int32_t x = b[i], v, y, ax = x < 0 ? -x : x;
+        w += clamp(tw - w, -SL_SLOPE, SL_SLOPE);
+        /* the gate listens to the input: its envelope fast up, ~12 ms down (| 1: it reaches 0); open over thr, held
+         * open 10 ms after (no chatter between a low note's peaks), closed under thr / 2: up in 0.7 ms, down in 3 ms */
+        env = ax > env ? ax : env > 0 ? env - ((env >> 9) | 1) : 0;
+        if (!thr || env > thr)
+            open = 1, hold = 441;
+        else if (hold)
+            hold--;
+        else if (env < (thr >> 1))
+            open = 0;
+        gg = open ? (gg + 1024 > 32767 ? 32767 : gg + 1024) : (gg > 256 ? gg - 256 : 0);
+        hp += ((x << 8) - hp) >> hs;                    /* low cut (Q8) */
+        v = clamp(x - (hp >> 8), -230000, 230000);
+        pre += ((v << 4) - pre) >> pk;                  /* pre-EQ: the part above ~880 Hz (Q4), pushed by emph / 256 */
+        v = clamp(v + (((v - (pre >> 4)) * emph) >> 8), -230000, 230000);
+        y = wall_shape(ty, clamp(((v >> 3) * g8) >> 5, -1000000, 1000000),
+                       ty == IT_SLAB ? clamp(((env >> 3) * g8) >> 7, 0, 300000)    /* (>> 3 first: 32 bits; SLAB's */
+                       : ty == IT_SHRED ? (v < 0 ? -v : v) : 0) << 4;              /* offset, SHRED's octave) */
+        v = mulq16(y - lp1, k);                         /* TONE: two one-pole low-passes */
+        y = v + lp1;
+        lp1 = y + v;
+        v = mulq16(y - lp2, k);
+        y = v + lp2;
+        lp2 = y + v;
+        y = ((((y + 8) >> 4) * lvl) >> 12);             /* the voicing's level */
+        dc += ((y << 8) - dc) >> 9;                     /* DC blocker (the lopsided shapers) */
+        y = (clamp(y - (dc >> 8), -32767, 32767) * gg) >> 15;   /* the gate last: closed is silence, no DC left
+                                                         * (32 bits: |y| < 2^15 here) */
+        b[i] = ins_mix(x, y, w);
+    }
+    s->w = w, s->lp1 = lp1, s->lp2 = lp2, s->hp = hp, s->dc = dc, s->pre = pre, s->env = env, s->gg = gg;
+    s->gopen = (uint8_t)open;
+    s->ghold = (uint16_t)hold;
+}
+
 /* the INSERT of the settings p on one channel b through state s: 1 while it runs (or fades out); 0: dry, bit for bit */
 static __attribute__((noinline)) int ins_run(ins_t *s, const int16_t *p, int32_t *b, uint32_t n)
 {
@@ -631,7 +718,9 @@ static __attribute__((noinline)) int ins_run(ins_t *s, const int16_t *p, int32_t
         memset(s, 0, sizeof *s);                        /* starting: no stale line or filter */
         s->type = (uint8_t)ty;
     }
-    if (s->type >= IT_PHASER)
+    if (s->type >= IT_BUZZ)                            /* (Rheia) WALL */
+        ins_wall(s, p, b, n, tw);
+    else if (s->type >= IT_PHASER)
         ins_swept(s, p, b, n, tw);
     else
         ins_drive(s, p, b, n, tw);
