@@ -71,7 +71,7 @@ jobs:
           echo "AC79_SDK=$SDK" >> "$GITHUB_ENV"
 
       - name: Build the firmware
-        run: ./build.sh --release "$RHEIA_VERSION"
+        run: sh build.sh --release "$RHEIA_VERSION"
 
       - name: Build the browser sound preview and the emulator
         run: |
