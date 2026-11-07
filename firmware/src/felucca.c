@@ -61,6 +61,7 @@
 #include "cpu1.c"           /* the second core: boot, self-test, state (ABOUT, console) */
 #include "panel.c"
 #include "ui.c"
+#include "beatgen.c"          /* Rheia: BEAT GEN, genre drum patterns into the drum track (after seq.c and ui.c) */
 #include "ui_song.c"
 #include "ui_studio.c"
 #include "icons.c"           /* parameter icons (FELUCCA_ICONS), used by ui_draw.c */

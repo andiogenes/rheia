@@ -42,6 +42,9 @@ run "flash storage (A/B, torn writes)" "$OUT/storage_test"
 $CC -o "$OUT/recovery_test" tests/recovery_test.c
 run "application USB recovery and boot-loop guard" "$OUT/recovery_test"
 
+$CC -Ifirmware/src -o "$OUT/beatgen_test" tests/beatgen_test.c
+run "Rheia BEAT GEN: styles, options, lengths, fills, humanise, seeds" "$OUT/beatgen_test"
+
 $CC -o "$OUT/arranger_test" tests/arranger_test.c
 run "song order, timing, repeats and missing scenes" "$OUT/arranger_test"
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/song_audio_test" tests/song_audio_test.c -lm
