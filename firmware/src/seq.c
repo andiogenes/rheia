@@ -1536,7 +1536,7 @@ static uint8_t in_key;
 static void arp_add(track_t *t, uint32_t note)
 {
     uint32_t i;
-    if (t->p[P_AHOLD] && t->arp_phys == 0u)
+    if (t->p[P_AHOLD] == 1 && t->arp_phys == 0u)   /* (Rheia: HOLD ON; DRONE latches nothing here) */
         t->nheld = 0;                               /* new chord replaces the latched one */
     t->arp_phys++;                                  /* every key-down: arp_remove counts every key-up */
     for (i = 0; i < t->nheld; i++)
@@ -1560,7 +1560,7 @@ static void arp_remove(track_t *t, uint32_t note)
     uint32_t i, k = 0;
     if (t->arp_phys)
         t->arp_phys--;
-    if (t->p[P_AHOLD])
+    if (t->p[P_AHOLD] == 1)                         /* (Rheia: HOLD ON) */
         return;
     for (i = 0; i < t->nheld; i++)
         if (t->held[i] != note) {
@@ -1851,7 +1851,14 @@ static uint32_t kh_set[NTRK][4];                   /* the notes held (bit per MI
 static uint32_t kh_mo[NTRK][4];                    /* .. of them, a key's: its MIDI note-off waits */
 static uint8_t kh_mc[NTRK];                        /* .. on this channel */
 static uint8_t kh_phys[NTRK];                      /* note-ons still down (a chord key: one per note) */
-static int kh_on(const track_t *t) { return !t->p[P_AMODE] && t->p[P_AHOLD] && !is_drum(t); }
+static int kh_on(const track_t *t) { return !t->p[P_AMODE] && t->p[P_AHOLD] == 1 && !is_drum(t); }   /* (Rheia: HOLD ON) */
+/* (Rheia) DRONE: ARP 2 > HOLD DRONE (a synth track, the arp on or off). The first note played with no drone sounding
+ * becomes the drone: it goes on sounding when let go, a pedal note; every note after it plays as ever, on top (or into the
+ * arp: a TREM over the drone). The drone's key again ends it; so do HOLD set to anything else, another sound, a panic.
+ * Held for a player (live_set): the sequencer leaves it alone; the lowest note of a POLY track, the voice budget keeps it
+ * (voice.c). Recorded as heard: a note from where it was played to where it ended */
+static uint8_t dr_note[NTRK];                      /* the drone, MIDI note + 1; 0 none */
+static int dr_on(const track_t *t) { return t->p[P_AHOLD] == 2 && !is_drum(t); }
 static int kh_has(const track_t *t, uint32_t note)
 {
     return (kh_set[trk_index(t) % NTRK][(note >> 5) & 3u] >> (note & 31u)) & 1u;
@@ -1906,11 +1913,41 @@ static void kh_release(track_t *t)                  /* every held note ends */
     memset(kh_mo[ti], 0, sizeof kh_mo[ti]);
     kh_phys[ti] = 0;
 }
+static void dr_release(track_t *t)                 /* (Rheia) the drone ends */
+{
+    uint32_t ti = trk_index(t) % NTRK, n;
+    if (!dr_note[ti])
+        return;
+    n = dr_note[ti] - 1u;
+    dr_note[ti] = 0;
+    rec_release(t, n);
+    live_set(t, n, 0);
+    trk_note_off(t, n);
+}
 static void input_on(track_t *t, uint32_t note, uint32_t vel)
 {
     if (is_drum(t)) {                             /* (a GM note on the drum track: its lane) */
         drum_input(midi_drum_lane(note), vel_lvl(vel), 0, 1);
         return;
+    }
+    if (dr_on(t)) {                               /* (Rheia) DRONE: the first note is the drone, its key again ends it */
+        uint32_t ti = trk_index(t) % NTRK;
+        if (dr_note[ti] == note + 1u) {
+            dr_release(t);
+            return;
+        }
+        if (!dr_note[ti]) {
+            dr_note[ti] = (uint8_t)(note + 1u);
+            last_note = (uint8_t)note;
+            arm_start(t);
+            if (t->p[P_VOICE] != V_POLY)
+                mono_hint = 1;                    /* (one note at a time: the next replaces it; the screen says so) */
+            live_set(t, note, 1);
+            if (((song.rec >> ti) & 1u) && song.playing)
+                rec_note(t, note, vel, 0, 1);
+            trk_note_on(t, note, vel);
+            return;
+        }
     }
     last_note = (uint8_t)note;
     {   /* (2.6) played again under the pedal: the note-off it waited with first (the arp's key count, a recording's
@@ -1961,6 +1998,8 @@ static void input_off(track_t *t, uint32_t note)
             ft_note_off(midi_drum_lane(note));
         return;
     }
+    if (dr_on(t) && dr_note[trk_index(t) % NTRK] == note + 1u)
+        return;                                     /* (Rheia) DRONE: it goes on sounding */
     if (kh_on(t) && kh_has(t, note)) {             /* (2.7) KBD HOLD: it goes on sounding */
         if (kh_phys[trk_index(t) % NTRK])
             kh_phys[trk_index(t) % NTRK]--;
@@ -3419,6 +3458,7 @@ static void events_block(uint32_t n)
         track_t *t = &trk[i];
         if ((pr >> i) & 1u) {
             kh_release(t);                            /* (2.7) KBD HOLD: what it held ends */
+            dr_release(t);                            /* (Rheia) the drone too */
             if (t->pold) {                            /* (2.6) a preset loaded: the notes keep sounding as they are
                                                        * and fade out with the old sound (voice.c sound_change):
                                                        * no release cut short (an organ's key-off) under the fade */
@@ -3441,7 +3481,8 @@ static void events_block(uint32_t n)
         if (i < NPART)
             engine_block(t);                          /* engine switch: fade, then switch (voice.c) */
         /* ARP turned off, or HOLD released with no key down: drop the latched chord */
-        if ((t->armp && !t->p[P_AMODE]) || (t->aholdp && !t->p[P_AHOLD] && !t->arp_phys)) {
+        if ((t->armp && !t->p[P_AMODE]) || (t->aholdp == 1 && t->p[P_AHOLD] != 1 && !t->arp_phys)) {   /* (Rheia: HOLD
+                                                       * ON left, to OFF or DRONE) */
             t->nheld = 0;
             if (!t->p[P_AMODE])
                 t->arp_phys = 0;
@@ -3449,6 +3490,8 @@ static void events_block(uint32_t n)
         }
         if (kh_any(t) && !kh_on(t))
             kh_release(t);                            /* (2.7) KBD HOLD off (HOLD OFF, ARP on): the held notes end */
+        if (dr_note[i] && !dr_on(t))
+            dr_release(t);                            /* (Rheia) HOLD no longer DRONE: the drone ends */
         t->armp = t->p[P_AMODE];
         t->aholdp = t->p[P_AHOLD];
     }

@@ -418,6 +418,62 @@ static void kbd_hold_test(void)
 }
 
 /* 2.7 (#126): EDIT's MUTE mode (drum track) stays when EDIT is let go */
+/* (Rheia) ARP 2 > HOLD DRONE: the first note goes on sounding (a pedal), the others play as ever on top; its key again
+ * ends it; with the arp on it stays out of the arp's notes; HOLD set to something else ends it; HOLD ON as before */
+static void drone_test(void)
+{
+    track_t *t = &trk[0];
+    memset(trk, 0, sizeof trk);
+    memset(&song, 0, sizeof song);
+    host_tracks_init();
+    memset(held_key, 0, sizeof held_key);
+    memset(dr_note, 0, sizeof dr_note);
+    kb_prev = 0;
+    t->p[P_AMODE] = 0, t->p[P_AHOLD] = 2, t->p[P_QUANT] = 0, t->p[P_CHORD] = 0, t->p[P_VOICE] = V_POLY;
+    assert(!strcmp(TP[P_AHOLD].names[2], "DRONE") && TP[P_AHOLD].max == 2);
+    fm1_in.notes = 1u << 0;                             /* the lowest key (F3, 53): the drone */
+    keyboard_block();
+    fm1_in.notes = 0;                                   /* let go: it goes on */
+    keyboard_block();
+    assert(sounding(t, 53) && dr_note[0] == 54u);
+    fm1_in.notes = 1u << 7 | 1u << 11;                  /* C4 + E4 on top */
+    keyboard_block();
+    assert(sounding(t, 53) && sounding(t, 60) && sounding(t, 64));
+    fm1_in.notes = 0;                                   /* let go: they end, the drone goes on */
+    keyboard_block();
+    assert(sounding(t, 53) && !sounding(t, 60) && !sounding(t, 64));
+    fm1_in.notes = 1u << 0;                             /* the drone's key again: it ends */
+    keyboard_block();
+    fm1_in.notes = 0;
+    keyboard_block();
+    assert(!sounding(t, 53) && !dr_note[0]);
+    /* with the arp (TREM) on: the drone sounds by itself, the arp plays only the notes after it */
+    t->p[P_AMODE] = AM_TREM;
+    fm1_in.notes = 1u << 0;
+    keyboard_block();
+    fm1_in.notes = 1u << 0 | 1u << 7 | 1u << 11;
+    keyboard_block();
+    assert(sounding(t, 53) && t->nheld == 2u && t->held[0] != 53u && t->held[1] != 53u);
+    fm1_in.notes = 0;
+    keyboard_block();
+    assert(sounding(t, 53) && t->nheld == 0u);
+    /* HOLD to OFF: the drone ends (the block's check) */
+    t->p[P_AHOLD] = 0;
+    if (dr_note[0] && !dr_on(t))
+        dr_release(t);
+    assert(!sounding(t, 53) && !dr_note[0]);
+    /* HOLD ON (KBD HOLD) as before: no drone, the chord latched */
+    t->p[P_AMODE] = 0, t->p[P_AHOLD] = 1;
+    fm1_in.notes = 1u << 7;
+    keyboard_block();
+    fm1_in.notes = 0;
+    keyboard_block();
+    assert(sounding(t, 60) && kh_has(t, 60) && !dr_note[0]);
+    kh_release(t);
+    t->p[P_AHOLD] = 0;
+    puts("drone (Rheia): a pedal note under the others, its key ends it, out of the arp, HOLD OFF ends it, HOLD ON as before ok");
+}
+
 static void mute_mode_test(void)
 {
     er_mute = 1;
@@ -438,6 +494,7 @@ int main(void)
     arp_swing_test();
     clkout_test();
     kbd_hold_test();
+    drone_test();
     mute_mode_test();
     return 0;
 }

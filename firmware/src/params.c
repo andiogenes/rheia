@@ -49,6 +49,7 @@ static const char *const N_DLY[] = {"1/4", "1/8", "1/16", "1/32", "8T", "16T", "
 static const char *const N_SCALE[] = {"CHR", "MAJ", "MIN", "DOR", "MIX", "PEN", "MPEN", "HARM",
                                     "PHRY", "LYD", "LOC", "MEL", "BLUES", "WHOLE", "DIMHW", "DIMWH"};
 static const char *const N_ONOFF[] = {"OFF", "ON"};
+static const char *const N_AHOLD[] = {"OFF", "ON", "DRONE"};   /* (Rheia) ARP 2 > HOLD: DRONE, a pedal note (seq.c dr_*) */
 static const char *const N_CLKOUT[] = {"OFF", "OUT"};   /* 2.7, GLO > MIDI 3 > CLOCK: OUT, the MIDI clock out */
 static const char *const N_DRMAP[] = {"GM", "1-16"};   /* (2.7) GLO > MIDI 3: DR MAP */
 static const char *const N_QUANT[] = {"OFF", "SNAP", "WHITE"};   /* seq.c kb_map; 1 = SNAP as the old ON */
@@ -100,7 +101,7 @@ static const param_desc_t TP[P_COUNT] = {
     [P_AGATE] = PD("GATE", F_PCT, 1, 127, 64),
     [P_ASWING] = PD("SWG", F_SWING, 0, 100, 0),
     [P_APROB] = PD("PROB", F_PCT, 0, 127, 127),
-    [P_AHOLD] = PE("HOLD", N_ONOFF, 0),
+    [P_AHOLD] = PE("HOLD", N_AHOLD, 0),           /* (Rheia: OFF, ON, DRONE: seq.c dr_*) */
     [P_AORDER] = PE("ORD", N_ORDER, 0),
     [P_ROOT] = PD("ROOT", F_NOTE, 0, 11, 0),
     [P_SCALE] = PE("SCL", N_SCALE, 0),
