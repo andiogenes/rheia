@@ -782,8 +782,8 @@ UI_SMALL static void layer_tap(uint32_t layer)
         break;
     case LY_ERASE:
     case LY_STEP:
-        if (on_drum_page()) {                             /* DRUMS: GRID -> KIT -> SOUND (2.7) */
-            drum_page = (uint8_t)((drum_page + 1u) % 3u);
+        if (on_drum_page()) {                             /* DRUMS: GRID -> KIT -> SOUND (2.7) -> GEN (Rheia) */
+            drum_page = (uint8_t)((drum_page + 1u) % DRUM_NPAGES);
             ui.force = 1;
             break;
         }

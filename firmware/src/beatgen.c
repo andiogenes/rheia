@@ -233,4 +233,88 @@ UI_SMALL static void beatgen_apply(const bg_cfg_t *cfg)
     fm1_irq_on();
     sync_reload = 1;
 }
+
+/* ---- the GEN page of the DRUMS screen (ui_studio.c drum_page 3) ----
+ * The body shows the pattern's first bar as it would be written; the knobs set it, two sets of four:
+ *   A: STYLE  BARS  FILL  HUMAN        B: KICK  CYM  RATE  ACCENT
+ * OCT- flips the set, OCT+ writes the pattern into the drum track (EDIT + OCT- undoes it). After a write the seed
+ * moves on, so with HUMAN on the next write is another take of the same settings. */
+static bg_cfg_t bg_ui = {BG_TRAD, 1, BG_KICK_STYLE, BG_CYM_AUTO, BG_CRATE_AUTO, BG_FILL_OFF, 1, 1, 1};
+static uint8_t bg_kset;                                  /* 0: set A, 1: set B */
+static bg_pat_t bg_prev;                                 /* the preview */
+static bg_cfg_t bg_prev_cfg;
+static uint8_t bg_prev_ok;
+
+UI_SMALL static const bg_pat_t *bg_preview(void)
+{
+    if (!bg_prev_ok || memcmp(&bg_prev_cfg, &bg_ui, sizeof bg_ui)) {
+        beatgen_make(&bg_ui, &bg_prev);
+        bg_prev_cfg = bg_ui;
+        bg_prev_ok = 1;
+    }
+    return &bg_prev;
+}
+UI_SMALL static int32_t bg_step(int32_t v, int32_t s, int32_t n)  /* one notch a turn, held at the ends */
+{
+    return clamp(v + (s > 0 ? 1 : -1), 0, n - 1);
+}
+static const uint8_t BG_BARS[3] = {1, 2, 4};
+UI_SMALL static uint32_t bg_bars_i(void) { return bg_ui.bars == 4u ? 2u : bg_ui.bars == 2u ? 1u : 0u; }
+UI_SMALL static void bg_knob(uint32_t k, int32_t s)
+{
+    if (!s)
+        return;
+    if (!bg_kset) {
+        if (k == 0) bg_ui.style = (uint8_t)bg_step(bg_ui.style, s, BG_NSTYLE);
+        if (k == 1) bg_ui.bars = BG_BARS[bg_step((int32_t)bg_bars_i(), s, 3)];
+        if (k == 2) bg_ui.fill = (uint8_t)bg_step(bg_ui.fill, s, BG_NFILL);
+        if (k == 3) bg_ui.human = (uint8_t)bg_step(bg_ui.human, s, BG_HUMAN_MAX + 1);
+    } else {
+        if (k == 0) bg_ui.kick = (uint8_t)bg_step(bg_ui.kick, s, BG_NKICK);
+        if (k == 1) bg_ui.cym = (uint8_t)bg_step(bg_ui.cym, s, BG_NCYM);
+        if (k == 2) bg_ui.crate = (uint8_t)bg_step(bg_ui.crate, s, BG_NCRATE);
+        if (k == 3) bg_ui.accent = (uint8_t)(s > 0);
+    }
+}
+/* the four dials of the set shown: labels, values (upper case: the caller lowers them), ratio 0..1000 */
+UI_SMALL static void bg_dials(const char **lab, char val[4][12], int32_t ratio[4])
+{
+    static const char *const LA[4] = {"style", "bars", "fill", "human"}, *const LB[4] = {"kick", "cym", "rate", "accent"};
+    uint32_t k;
+    for (k = 0; k < 4u; k++)
+        lab[k] = bg_kset ? LB[k] : LA[k];
+    if (!bg_kset) {
+        str_cpy(val[0], BG_STYLE_NAME[bg_ui.style % BG_NSTYLE], 12);
+        fmt_int(val[1], BG_BARS[bg_bars_i()]);
+        str_cpy(val[2], BG_FILL_NAME[bg_ui.fill % BG_NFILL], 12);
+        fmt_int(val[3], bg_ui.human);
+        ratio[0] = (int32_t)(bg_ui.style % BG_NSTYLE) * 1000 / (BG_NSTYLE - 1);
+        ratio[1] = (int32_t)bg_bars_i() * 500;
+        ratio[2] = (int32_t)(bg_ui.fill % BG_NFILL) * 1000 / (BG_NFILL - 1);
+        ratio[3] = (int32_t)bg_ui.human * 1000 / (int32_t)BG_HUMAN_MAX;
+    } else {
+        str_cpy(val[0], BG_KICK_NAME[bg_ui.kick % BG_NKICK], 12);
+        str_cpy(val[1], BG_CYM_NAME[bg_ui.cym % BG_NCYM], 12);
+        str_cpy(val[2], BG_CRATE_NAME[bg_ui.crate % BG_NCRATE], 12);
+        str_cpy(val[3], bg_ui.accent ? "ON" : "OFF", 12);
+        ratio[0] = (int32_t)(bg_ui.kick % BG_NKICK) * 500;
+        ratio[1] = (int32_t)(bg_ui.cym % BG_NCYM) * 1000 / (BG_NCYM - 1);
+        ratio[2] = (int32_t)(bg_ui.crate % BG_NCRATE) * 1000 / (BG_NCRATE - 1);
+        ratio[3] = bg_ui.accent ? 1000 : 0;
+    }
+}
+UI_SMALL static void bg_write(void)                      /* OCT+ on the GEN page */
+{
+    if (ft_on || (song.playing && song.rec)) {
+        ui_message("STOP RECORDING FIRST");
+        return;
+    }
+    if (song.playing && arrangement_enabled) {
+        ui_message("STOP THE SONG FIRST");
+        return;
+    }
+    beatgen_apply(&bg_ui);
+    bg_ui.seed++;                                        /* (the next write: another take; the preview follows) */
+    ui_say("WRITTEN: ", BG_STYLE_NAME[bg_ui.style % BG_NSTYLE]);
+}
 #endif

@@ -54,6 +54,7 @@ static int16_t scope_buf[SCOPE_N], scope_bufr[SCOPE_N];
 static uint32_t scope_w;
 #include "../firmware/src/panel.c"
 #include "../firmware/src/ui.c"
+#include "../firmware/src/beatgen.c"          /* (Rheia: the DRUMS screen's GEN page) */
 static uint32_t saves, loads, erases;
 static int project_used(uint32_t i) { return i < 2; }
 static void project_save(uint32_t i) { (void)i; saves++; ui_message("SAVED"); }
@@ -643,6 +644,40 @@ int main(int argc, char **argv)
         transport_req = 1; frames(30); song.rec = 2u; frame(); ui.force = 1; frame(); ppm("live-tracks");
         song.rec = 0; transport_req = 2; frames(2);
         song.sel = TRK_DRUM;
+    }
+    {   /* (Rheia) the GEN page: BEAT GEN's knobs, OCT- the other set, OCT+ writes, one undo */
+        dstep_t keep[NSTEP];
+        int16_t keep_len = TDRUM->p[P_SLEN];
+        uint16_t seed;
+        studio_open(SC_DRUM); drum_page = 0; frames(2);
+        memcpy(keep, TDRUM->dstep, sizeof keep);
+        encs[panel.enc[EN_SELECT]] = 9; frame();
+        check(on_drum_page() && drum_page == 3u, "DRUMS: SELECT reaches GEN, the last page");
+        ui.force = 1; ui.msg_t = 0; frame(); ppm("live-gen");
+        for (i = 0; i < 4u; i++) { encs[panel.enc[EN_K1]] = 1; frame(); }
+        encs[panel.enc[EN_K2]] = 1; frame();
+        encs[panel.enc[EN_K3]] = 2; frame();             /* (one notch a turn: SNARE) */
+        check(bg_ui.style == BG_DBEAT && bg_ui.bars == 2u && bg_ui.fill == BG_FILL_SNARE, "GEN: KNOB 1 style, 2 bars, 3 fill");
+        check(memcmp(keep, TDRUM->dstep, sizeof keep) == 0, "GEN: turning the knobs writes nothing");
+        ui.force = 1; ui.msg_t = 0; frame(); ppm("live-gen-dbeat");
+        tap(B_OCTDN);
+        check(bg_kset == 1u, "GEN: OCT- the other knobs (KICK CYM RATE ACCENT)");
+        encs[panel.enc[EN_K1]] = 1; frame();
+        check(bg_ui.kick == BG_KICK_DOUBLE, "GEN set B: KNOB 1 the kick");
+        ui.force = 1; ui.msg_t = 0; frame(); ppm("live-gen-b");
+        tap(B_OCTDN);
+        check(bg_kset == 0u, "GEN: OCT- again, back to STYLE BARS FILL HUMAN");
+        ft_on = 1; tap(B_OCTUP); ft_on = 0;
+        check(memcmp(keep, TDRUM->dstep, sizeof keep) == 0, "GEN: no write during a free take");
+        seed = bg_ui.seed;
+        tap(B_OCTUP);
+        check(TDRUM->p[P_SLEN] == 32 && TDRUM->p[P_SDIV] == 2, "GEN: OCT+ writes 2 bars of 1/16");
+        check(dstep_has(&TDRUM->dstep[4], 2) && dstep_has(&TDRUM->dstep[6], 0) && dstep_has(&TDRUM->dstep[31], 2) &&
+              dstep_rat(&TDRUM->dstep[31], 2) == 1u, "GEN: the D-beat, its snare fill into 32nds");
+        check(bg_ui.seed == (uint16_t)(seed + 1u), "GEN: the next write is another take");
+        undo_swap(0);
+        check(memcmp(keep, TDRUM->dstep, sizeof keep) == 0 && TDRUM->p[P_SLEN] == keep_len, "GEN: one undo brings the old pattern back");
+        drum_page = 0; ui.force = 1; frame();
     }
     {   /* the free take screens */
         static track_t keep[NTRK];

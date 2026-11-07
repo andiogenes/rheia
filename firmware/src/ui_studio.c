@@ -6,7 +6,9 @@
  * LAYERS (a function button held: what the 16 white keys and the knobs do now), HOLD (a hold to
  * confirm: clear, save), REC (armed / free take). Every band is drawn into the canvas only when its
  * signature changed. */
-static uint8_t drum_page, drum_cursor;   /* drum_page: 0 GRID, 1 KIT, 2 SOUND (2.7: a sound's TUNE, DECAY) */
+static uint8_t drum_page, drum_cursor;   /* drum_page: 0 GRID, 1 KIT, 2 SOUND (2.7: a sound's TUNE, DECAY), 3 GEN (Rheia:
+                                          * BEAT GEN, beatgen.c) */
+#define DRUM_NPAGES 4u
 #define drum_lane pen_lane                 /* (2.7.1) one drum sound picked everywhere: the GRID, SOUND, the SEQ layer, a pad
                                             * played (seq.c pen_lane) */
 /* (2.7.1) the black keys pick the drum sound on the GRID page and in the SEQ layer (the pages: OCT- / OCT+), never heard;
@@ -391,10 +393,13 @@ UI_SMALL static void drum_screen_draw(void)
         fmt_int(b, (int32_t)kit + 1);
         cv_text(19 - text_w(&FONT_S, b) / 2, 13, &FONT_S, b, C_BLACK);
         cv_text(44, 6, &FONT_L, DRUM_KIT_NAMES[kit], C_WHITE);
-        cv_text(194, 1, &FONT_S, "grid", drum_page == 0 ? C_WHITE : TE_G3);
-        cv_text(194, 15, &FONT_S, "kit", drum_page == 1 ? C_WHITE : TE_G3);
-        cv_text(194, 29, &FONT_S, "sound", drum_page == 2 ? C_WHITE : TE_G3);
-        cv_rect(188, 5 + (int32_t)drum_page * 14, 3, 9, TE_DRUM);
+        {                                               /* (Rheia) three of the four page names: GEN scrolls them */
+            static const char *const DPN[DRUM_NPAGES] = {"grid", "kit", "sound", "gen"};
+            uint32_t first = drum_page == 3u ? 1u : 0u, n;
+            for (n = 0; n < 3u; n++)
+                cv_text(194, 1 + (int32_t)n * 14, &FONT_S, DPN[first + n], first + n == drum_page ? C_WHITE : TE_G3);
+            cv_rect(188, 5 + (int32_t)(drum_page - first) * 14, 3, 9, TE_DRUM);
+        }
         cv_blit(0, 40);
     }
     sig = drum_page + drum_lane * 7u + drum_cursor * 101u + song.playing * 71u + len * 3u + ui.sheet * 7919u +
@@ -402,6 +407,10 @@ UI_SMALL static void drum_screen_draw(void)
     for (i = 0; i < DRUM_LANES; i++) sig = sig * 5u + (uint32_t)(drum_tune[i] + 8) * 9u + (uint32_t)(drum_dec[i] + 4);
     if (song.playing) sig = sig * 31u + TDRUM->seq_idx;
     for (i = 0; i < DRUM_LANES; i++) sig = sig * 3u + (pad_lit[i] != 0);
+    if (drum_page == 3u) {                             /* (Rheia) GEN: its settings */
+        const uint8_t *c = (const uint8_t *)&bg_ui;
+        for (i = 0; i < sizeof bg_ui; i++) sig = sig * 131u + c[i];
+    }
     for (i = 0; i < len; i++) {
         const dstep_t *s = &TDRUM->dstep[i];
         sig = sig * 31u + dstep_mask(s);
@@ -446,6 +455,23 @@ UI_SMALL static void drum_screen_draw(void)
                 fmt_int(nu, m);
                 if (m > 0) { nu[0] = '+'; fmt_int(nu + 1, m); }
                 sheet_bar(84, DSHEET_N, val, ui.sheet - 1u, TE_DIM[3]);
+            }
+        } else if (drum_page == 3u) {                  /* (Rheia) GEN: the first bar of the pattern OCT+ would write */
+            static const uint8_t GL[8] = {BG_L_CRASH, BG_L_RIDE, BG_L_OPEN, BG_L_HAT, BG_L_TOM_H, BG_L_TOM_L, BG_L_SNARE, BG_L_KICK};
+            const bg_pat_t *pv = bg_preview();
+            for (i = 0; i < 8u; i++) {
+                int32_t y = (int32_t)i * 12 + 2;
+                cv_rect(2, y, 6, 10, pad_lit[GL[i]] ? C_WHITE : TE_G2);
+                for (j = 0; j < 16u; j++) {
+                    const dstep_t *s = &pv->st[j];
+                    uint32_t l = GL[i];
+                    cv_rect(12 + (int32_t)j * 14, y, 12, 10, dstep_has(s, l) ? lvl_col(dstep_lvl(s, l)) : j % 4u ? TE_G1 : TE_G2);
+                    if (dstep_has(s, l) && dstep_rat(s, l)) {
+                        uint32_t r;
+                        for (r = 0; r < dstep_rat(s, l); r++)
+                            cv_rect(13 + (int32_t)j * 14 + (int32_t)r * 3, y + 1, 2, 1, C_BLACK);
+                    }
+                }
             }
         } else {                                       /* KIT: 16 pads, lit on each hit; SOUND (2.7): the one KNOB 1 picks
                                                         * framed, a tuned or shortened / lengthened one marked */
@@ -493,6 +519,13 @@ UI_SMALL static void drum_screen_draw(void)
             ratio[2] = (drum_dec[drum_lane] - DRUM_DEC_MIN) * 1000 / (DRUM_DEC_MAX - DRUM_DEC_MIN);
             ratio[3] = song.g[G_DRLVL] * 1000 / 127;
             te_dials(184, LS, val, ratio, 3u, &footer);
+        } else if (drum_page == 3u) {                  /* (Rheia) GEN: set A or B (OCT-), OCT+ writes */
+            const char *lab[4];
+            char up[4][12];
+            bg_dials(lab, up, ratio);
+            for (i = 0; i < 4u; i++)
+                te_lower(v[i], up[i], sizeof v[i]);
+            te_dials(184, lab, val, ratio, 4u + bg_kset, &footer);
         } else {
             fmt_int(v[0], (int32_t)kit + 1);
             fmt_int(v[1], song.g[G_DRLVL] * 100 / 127);
@@ -654,12 +687,20 @@ UI_SMALL static void drum_screen_input(uint32_t pressed, uint32_t home, uint32_t
             ui.force = 1;
             continue;
         }
+        if ((b == B_OCTDN || b == B_OCTUP) && drum_page == 3u) {   /* (Rheia) GEN: OCT- the other knobs, OCT+ write */
+            if (b == B_OCTUP)
+                bg_write();
+            else
+                bg_kset ^= 1u;
+            ui.force = 1;
+            continue;
+        }
         if (b == B_PLAY) {
             if (ft_owns_press()) ;
             else if (!song.playing && arrangement_enabled && !arr_valid(&arrangement, arrangement_ready())) ui_message("EMPTY SECTION: REC");
             else transport_req = song.playing ? 2 : 1;
         } else if (b == B_SEQ || b == B_EDIT) {
-            drum_page = (uint8_t)((drum_page + 1u) % 3u);   /* GRID -> KIT -> SOUND (2.7) */
+            drum_page = (uint8_t)((drum_page + 1u) % DRUM_NPAGES);   /* GRID -> KIT -> SOUND (2.7) -> GEN (Rheia) */
             ui.msg_t = 0;
             ui.force = 1;
         } else if (b == B_SAVE) {
@@ -667,9 +708,9 @@ UI_SMALL static void drum_screen_input(uint32_t pressed, uint32_t home, uint32_t
             return;
         }
     }
-    if ((s = panel_enc(EN_SELECT)) && (uint32_t)clamp((int32_t)drum_page + s, 0, 2) != drum_page) {   /* SELECT: grid <-
+    if ((s = panel_enc(EN_SELECT)) && (uint32_t)clamp((int32_t)drum_page + s, 0, DRUM_NPAGES - 1) != drum_page) {   /* SELECT: grid <-
                                                                      * kit -> sound (2.7), its pages */
-        drum_page = (uint8_t)clamp((int32_t)drum_page + s, 0, 2);
+        drum_page = (uint8_t)clamp((int32_t)drum_page + s, 0, DRUM_NPAGES - 1);
         ui.msg_t = 0;
         ui.force = 1;
     }
@@ -720,6 +761,8 @@ UI_SMALL static void drum_screen_input(uint32_t pressed, uint32_t home, uint32_t
                 fm1_irq_on();
                 sync_reload = 1;
             }
+        } else if (drum_page == 3u) {                  /* (Rheia) GEN */
+            bg_knob(k, s);
         } else if (drum_page == 2u) {                  /* SOUND (2.7) */
             if (k == 0) {
                 uint8_t l = (uint8_t)clamp(drum_lane + s, 0, DRUM_LANES - 1);
