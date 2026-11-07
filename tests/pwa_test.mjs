@@ -67,7 +67,7 @@ try {
     return (await c.keys()).map((r) => new URL(r.url).pathname);
   });
   ok(cached.includes("/webapp/editor/") && cached.includes("/webapp/installer/") &&
-     cached.some((p) => /^\/firmware\/sloop-.*\.fwsc$/.test(p)) && cached.includes("/webapp/editor/fukiai.ttf"),
+     cached.some((p) => /^\/firmware\/rheia-.*\.fwsc$/.test(p)) && cached.includes("/webapp/editor/fukiai.ttf"),
      "kept: the installer, the editor, its font, the firmware");
 
   const cdp = await ctx.newCDPSession(page);
@@ -76,31 +76,31 @@ try {
 
   await stop();                                          // ---- no network at all
   await page.goto(base + "installer/");
-  await page.waitForFunction(() => /SLOOP \d/.test(document.getElementById("status").textContent), null, { timeout: 8000 })
+  await page.waitForFunction(() => /Rheia \d/.test(document.getElementById("status").textContent), null, { timeout: 8000 })
     .catch(() => {});
   const st = await page.textContent("#status");
-  ok(/^SLOOP \d/.test(st), `offline: the installer loads its firmware from the copy (${st.trim().slice(0, 40)})`);
+  ok(/^Rheia \d/.test(st), `offline: the installer loads its firmware from the copy (${st.trim().slice(0, 40)})`);
   await page.goto(base + "editor/");
   const ed = await page.evaluate(async () => {
     await document.fonts.ready;
     return { title: document.title, connect: !!document.getElementById("connect"), font: document.fonts.check('16px "Fukiai"', "") };
   });
-  ok(ed.title === "SLOOP Editor" && ed.connect, "offline: the editor loads");
+  ok(ed.title === "Rheia Editor" && ed.connect, "offline: the editor loads");
   ok(ed.font, "offline: with its icon font");
   await page.goto(base + "editor/index.html?x=1");
-  ok((await page.title()) === "SLOOP Editor", "offline: index.html and a query find the same copy");
+  ok((await page.title()) === "Rheia Editor", "offline: index.html and a query find the same copy");
   const miss = await page.goto(base + "nothing.html").then(() => "page").catch(() => "error");
   ok(miss === "error", "offline: what is not kept is not invented");
 
   await serve();                                         // ---- online again, the site changed
   const f = join(site, "webapp", "editor", "index.html");
   const orig = readFileSync(f, "utf8");
-  writeFileSync(f, orig.replace("<title>SLOOP Editor</title>", "<title>SLOOP Editor NEW</title>"));
+  writeFileSync(f, orig.replace("<title>Rheia Editor</title>", "<title>Rheia Editor NEW</title>"));
   await page.goto(base + "editor/");
-  ok((await page.title()) === "SLOOP Editor NEW", "online: the page as published now, not the old copy");
+  ok((await page.title()) === "Rheia Editor NEW", "online: the page as published now, not the old copy");
   await stop();
   await page.goto(base + "editor/");
-  ok((await page.title()) === "SLOOP Editor NEW", "offline after that: the copy is the newest one seen");
+  ok((await page.title()) === "Rheia Editor NEW", "offline after that: the copy is the newest one seen");
   writeFileSync(f, orig);
 
   await serve();                                         // ---- a new site: a new sw.js takes over, the old copy goes
@@ -121,7 +121,7 @@ try {
 
   /* (2.7) a new build keeps the firmware's name: the copy the browser kept of the build before (a server that lets it
      keep one, no service worker) is not offered as "damaged": the installer asks the server first */
-  const fw = join(site, "firmware", "sloop-2.7.fwsc"), ix = join(site, "webapp", "installer", "index.html");
+  const fw = join(site, "firmware", "rheia-2.7.fwsc"), ix = join(site, "webapp", "installer", "index.html");
   const fw0 = readFileSync(fw), ix0 = readFileSync(ix, "utf8");
   server = spawn("python3", ["-c", `import http.server, os
 class H(http.server.SimpleHTTPRequestHandler):
@@ -143,7 +143,7 @@ os.chdir(${JSON.stringify(site)}); http.server.ThreadingHTTPServer(("127.0.0.1",
   await p2.reload();
   await p2.waitForTimeout(800);
   const second = await p2.textContent("#status");
-  ok(/SLOOP 2\.7/.test(first) && /SLOOP 2\.7/.test(second), "a new build of the same name: the new firmware, not the browser's old copy");
+  ok(/Rheia 2\.7/.test(first) && /Rheia 2\.7/.test(second), "a new build of the same name: the new firmware, not the browser's old copy");
   writeFileSync(fw, fw0); writeFileSync(ix, ix0);
   await c2.close();
 } finally {

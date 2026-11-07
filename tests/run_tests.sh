@@ -202,6 +202,9 @@ if command -v node >/dev/null 2>&1; then
     run "web pages: editor protocol, samples, packages, update protocol" node web/test_web.mjs
     rm -rf "$OUT/pwa-site" && python3 web/make_site.py build/felucca.fwsc 2.7 "$OUT/pwa-site" >/dev/null &&
         run "the site without internet in Chromium (skipped without Playwright)" node tests/pwa_test.mjs "$OUT/pwa-site"
+    if [ -f build/emu/rheia-emu.wasm ]; then                # (Rheia: python3 tools/build_emu.py)
+        run "Rheia emulator: boots, GEN page, a written pattern plays" node tests/emu_test.mjs build/emu/rheia-emu.wasm
+    fi
 else
     echo "== skip web tests (no node)"
 fi

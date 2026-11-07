@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Build the Rheia firmware (JieLi toolchain + three AC79 SDK files), the browser builds (sound preview and emulator),
+# test them, make the site (installer, editor, emulator, the firmware package) and publish it on GitHub Pages from main.
+name: Build and publish
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RHEIA_VERSION: "0.1-beta"                         # X.Y[-suffix]: package identity FM-1_9XY (tools/build.py --release)
+  SDK_TAG: AC79NN_SDK_V1.2.1_2023-12-13             # the SDK version tools/build.py checks (SDK_SHA256)
+  SDK_URL: https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install Pillow
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: clang and wasm-ld (browser builds)
+        run: sudo apt-get update && sudo apt-get install -y clang lld
+
+      - name: Cache the JieLi toolchain
+        uses: actions/cache@v4
+        with:
+          path: ~/.jieli
+          key: jieli-toolchain-v1
+
+      - name: JieLi toolchain
+        run: |
+          if [ ! -x "$HOME/.jieli/toolchain/pi32v2/bin/clang" ]; then sh tools/get_toolchain.sh; fi
+          echo "JIELI_TOOLCHAIN=$HOME/.jieli/toolchain" >> "$GITHUB_ENV"
+
+      - name: Cache the AC79 SDK files
+        uses: actions/cache@v4
+        with:
+          path: ~/ac79-sdk
+          key: ac79-sdk-${{ env.SDK_TAG }}-v1
+
+      - name: AC79 SDK (the three files the package needs)
+        run: |
+          SDK="$HOME/ac79-sdk"
+          if [ ! -f "$SDK/cpu/wl82/tools/uboot.boot" ]; then
+            rm -rf "$SDK"
+            for i in 1 2 3; do
+              git clone --depth 1 --filter=blob:none --sparse --branch "$SDK_TAG" "$SDK_URL" "$SDK" &&
+                git -C "$SDK" sparse-checkout set cpu/wl82/tools && break
+              rm -rf "$SDK"; sleep $((i * 10))
+            done
+          fi
+          ls -l "$SDK/cpu/wl82/tools/uboot.boot" "$SDK/cpu/wl82/tools/cfg_tool.bin" "$SDK/cpu/wl82/tools/cfg/eq_cfg_hw.bin"
+          echo "AC79_SDK=$SDK" >> "$GITHUB_ENV"
+
+      - name: Build the firmware
+        run: ./build.sh --release "$RHEIA_VERSION"
+
+      - name: Build the browser sound preview and the emulator
+        run: |
+          python3 tools/build_preview.py
+          python3 tools/build_emu.py
+
+      - name: Tests (BEAT GEN, the UI, the emulator, the site)
+        run: |
+          mkdir -p build/host/ui
+          CC="cc -O1 -Wall -Wno-unused-function"
+          $CC -Ifirmware/src -o build/host/beatgen_test tests/beatgen_test.c
+          build/host/beatgen_test
+          cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o build/host/ui_pages_test tests/ui_pages_test.c -lm
+          build/host/ui_pages_test build/host/ui
+          node tests/emu_test.mjs build/emu/rheia-emu.wasm
+          python3 tests/site_test.py
+
+      - name: The full SLOOP host suite (informational)
+        continue-on-error: true
+        run: sh tests/run_tests.sh
+
+      - name: Make the site
+        run: |
+          python3 web/make_site.py "build/felucca-$RHEIA_VERSION.fwsc" "$RHEIA_VERSION" site --beta
+          touch site/.nojekyll
+
+      - name: Upload the firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: rheia-${{ env.RHEIA_VERSION }}-fwsc
+          path: build/felucca-${{ env.RHEIA_VERSION }}.fwsc
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,45 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rheia for the FM-1</title>
+<meta name="description" content="Rheia: groovebox firmware for the M-VAVE FM-1, for blackened, industrial and noise music. Installer, editor and emulator.">
+<link rel="icon" href="webapp/icon-192.png">
+<style>
+  :root { --bg: #0e0e10; --card: #18181c; --edge: #2a2a30; --ink: #ececf0; --muted: #8e8e98; --accent: #ff6a2a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px; }
+  h1 { font-size: 44px; letter-spacing: .04em; margin: 0; }
+  .lede { color: var(--muted); margin: 8px 0 32px; max-width: 560px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  a.card { display: block; background: var(--card); border: 1px solid var(--edge); border-radius: 14px; padding: 18px;
+           color: inherit; text-decoration: none; }
+  a.card:hover, a.card:focus-visible { border-color: var(--accent); outline: none; }
+  .card b { display: block; font-size: 18px; margin-bottom: 6px; }
+  .card span { color: var(--muted); font-size: 14px; }
+  .card.primary b { color: var(--accent); }
+  footer { color: var(--muted); font-size: 13px; margin-top: 40px; }
+  footer a { color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <h1>RHEIA</h1>
+  <p class="lede">Groovebox firmware for the M-VAVE FM-1, tuned for blackened hardcore, industrial, sludge and noise:
+  blast beats and D-beats from the drum track's BEAT GEN page, on top of everything SLOOP does. Version <!--VERSION-->.</p>
+  <div class="cards">
+    <a class="card primary" href="webapp/emulator/"><b>Emulator</b><span>Try the firmware in the browser: screens, sequencer and sound, no FM-1 needed.</span></a>
+    <a class="card" href="webapp/installer/"><b>Installer</b><span>Put Rheia on your FM-1 over USB (Chrome or Edge). Back up first.</span></a>
+    <a class="card" href="webapp/editor/"><b>Editor</b><span>Sounds, patterns, samples and backups from the computer.</span></a>
+  </div>
+  <footer>
+    <p>A beta: install at your own risk. Free software (GPL-3.0) — <a href="https://github.com/andiogenes/rheia">source</a>.
+    Based on <a href="https://github.com/isod89/sloop-fm1">SLOOP</a> and <a href="https://github.com/hugelton/Felucca">Felucca</a>.
+    M-VAVE and FM-1 are trademarks of their owners; Rheia is not affiliated with them.</p>
+  </footer>
+</main>
+</body>
+</html>

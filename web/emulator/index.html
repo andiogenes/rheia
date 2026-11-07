@@ -1,0 +1,206 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rheia Emulator</title>
+<meta name="description" content="Rheia firmware for the M-VAVE FM-1, running in the browser: the real sound, sequencer and screens.">
+<style>
+  :root {
+    --bg: #0e0e10;
+    --body: #1b1b1f;
+    --body-edge: #2a2a30;
+    --ink: #e9e9ee;
+    --muted: #8a8a94;
+    --btn: #2b2b31;
+    --btn-ink: #d4d4da;
+    --lit: #ffffff;
+    --dim: #55555e;
+    --accent: #ff6a2a;
+    --k1: #2f7dff;
+    --k2: #2fbf71;
+    --k3: #f2c12e;
+    --k4: #ff6a2a;
+    --white-key: #e8e8ea;
+    --black-key: #18181b;
+    --kw: 42px;
+    --bw: 26px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header, footer { max-width: 760px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
+  h1 small { color: var(--muted); font-weight: 400; font-size: 14px; margin-left: 6px; }
+  nav a { color: var(--muted); margin-left: 14px; text-decoration: none; }
+  nav a:hover { color: var(--ink); }
+  #status { color: var(--muted); font-size: 13px; }
+
+  .device {
+    position: relative;
+    max-width: 760px;
+    margin: 0 auto;
+    background: var(--body);
+    border: 1px solid var(--body-edge);
+    border-radius: 18px;
+    padding: 20px;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+  .top { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: start; }
+  #screen {
+    width: 360px; height: 360px;
+    image-rendering: pixelated;
+    background: #000;
+    border-radius: 6px;
+    border: 6px solid #050506;
+    display: block;
+  }
+  .side { display: flex; flex-direction: column; gap: 18px; }
+  #encoders { display: flex; gap: 14px; flex-wrap: wrap; }
+  #knobs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; max-width: 372px; }
+  .knob-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .knob {
+    --a: 0deg;
+    width: 54px; height: 54px; border-radius: 50%;
+    background: radial-gradient(circle at 50% 40%, #3a3a42, #222227 70%);
+    border: 2px solid #3d3d45;
+    position: relative; cursor: ns-resize;
+    transform: rotate(var(--a));
+  }
+  .knob::after {
+    content: ""; position: absolute; left: 50%; top: 5px; width: 3px; height: 16px;
+    margin-left: -1.5px; border-radius: 2px; background: var(--ink);
+  }
+  .knob.k1 { border-color: var(--k1); } .knob.k2 { border-color: var(--k2); }
+  .knob.k3 { border-color: var(--k3); } .knob.k4 { border-color: var(--k4); }
+  .knob:focus-visible { outline: 2px solid var(--lit); outline-offset: 3px; }
+  .small .knob { width: 46px; height: 46px; }
+  .knob-label { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+
+  .rows { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .btn {
+    font: 600 12px/1 system-ui, sans-serif; letter-spacing: .05em;
+    color: var(--btn-ink); background: var(--btn);
+    border: 1px solid #3a3a42; border-radius: 8px;
+    padding: 12px 0; cursor: pointer; touch-action: none;
+  }
+  .btn[data-led="1"] { box-shadow: inset 0 -3px 0 #3c3c44; }
+  .btn[data-led="2"] { box-shadow: inset 0 -3px 0 var(--dim); }
+  .btn[data-led="3"] { box-shadow: inset 0 -3px 0 var(--lit), 0 0 10px rgba(255,255,255,.18); color: #fff; }
+  .btn.pressed { background: #44444d; }
+  .btn.latched { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn:focus-visible { outline: 2px solid var(--lit); outline-offset: 2px; }
+
+  .bottom { display: flex; gap: 14px; margin-top: 22px; align-items: flex-start; }
+  #oct { display: flex; flex-direction: column; gap: 8px; width: 64px; flex: none; }
+  .kbd-scroll { overflow-x: auto; flex: 1; padding-bottom: 4px; }
+  #keys { position: relative; height: 150px; width: calc(16 * var(--kw)); }
+  .key {
+    position: absolute; top: 0; display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 8px; font-size: 11px; cursor: pointer; touch-action: none;
+  }
+  .key.white {
+    position: relative; float: left; width: var(--kw); height: 150px;
+    background: var(--white-key); color: #6b6b72;
+    border: 1px solid #9a9aa2; border-radius: 0 0 6px 6px;
+  }
+  .key.black {
+    width: var(--bw); height: 92px; z-index: 2;
+    background: var(--black-key); color: #77777f;
+    border: 1px solid #000; border-radius: 0 0 5px 5px;
+  }
+  .key.white[data-led="3"] { box-shadow: inset 0 -6px 0 var(--accent); }
+  .key.black[data-led="3"] { box-shadow: inset 0 -6px 0 var(--accent); }
+  .key.white[data-led="2"] { box-shadow: inset 0 -6px 0 #c9c9cf; }
+  .key.black[data-led="2"] { box-shadow: inset 0 -6px 0 #44444b; }
+  .key.white.pressed { background: #cfcfd4; }
+  .key.black.pressed { background: #33333a; }
+
+  #overlay {
+    position: absolute; inset: 0; border-radius: 18px;
+    background: rgba(8, 8, 10, .82);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    text-align: center; padding: 24px; z-index: 5;
+  }
+  #overlay[hidden] { display: none; }
+  #power {
+    font: 600 16px system-ui, sans-serif; color: #111; background: var(--accent);
+    border: 0; border-radius: 999px; padding: 14px 30px; cursor: pointer;
+  }
+  #power:disabled { opacity: .7; cursor: default; }
+  #overlay p { color: var(--muted); max-width: 420px; margin: 0; }
+
+  footer { color: var(--muted); font-size: 13px; }
+  footer h2 { color: var(--ink); font-size: 15px; margin: 18px 0 6px; }
+  footer table { border-collapse: collapse; }
+  footer td { padding: 2px 14px 2px 0; vertical-align: top; }
+  kbd { font: 12px ui-monospace, monospace; background: #24242a; border: 1px solid #34343c; border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+  footer a { color: var(--ink); }
+
+  @media (max-width: 720px) {
+    .device { padding: 14px; border-radius: 14px; margin: 0 16px; }
+    .top { grid-template-columns: 1fr; }
+    #screen { width: 100%; height: auto; aspect-ratio: 1; }
+    #knobs { max-width: none; }
+    .row { grid-template-columns: repeat(3, 1fr); }
+    :root { --kw: 36px; --bw: 22px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Rheia<small>emulator</small></h1>
+  <nav><a href="../installer/">Installer</a><a href="../editor/">Editor</a><a href="https://github.com/andiogenes/rheia">Source</a></nav>
+</header>
+
+<main class="device" aria-label="FM-1 panel">
+  <div class="top">
+    <div>
+      <canvas id="screen" width="240" height="240" aria-label="The FM-1 screen"></canvas>
+      <div id="knobs"></div>
+    </div>
+    <div class="side">
+      <div id="encoders"></div>
+      <div class="rows">
+        <div class="row" id="row1"></div>
+        <div class="row" id="row2"></div>
+      </div>
+      <div id="status" aria-live="polite">Off</div>
+    </div>
+  </div>
+  <div class="bottom">
+    <div id="oct"></div>
+    <div class="kbd-scroll"><div id="keys"></div></div>
+  </div>
+  <div id="overlay">
+    <button id="power">Power on</button>
+    <p>The real Rheia firmware (sound, sequencer and screens) compiled for the browser. Sound starts when you power on.</p>
+  </div>
+</main>
+
+<footer>
+  <h2>Playing it</h2>
+  <table>
+    <tr><td>Keys</td><td><kbd>A</kbd>…<kbd>;</kbd> and <kbd>Z</kbd>…<kbd>N</kbd> white keys, <kbd>Q</kbd>…<kbd>[</kbd> black keys</td></tr>
+    <tr><td>Buttons</td><td><kbd>1</kbd>…<kbd>6</kbd> FX SEL ENV LFO EDIT GLO · <kbd>7</kbd> HOME <kbd>8</kbd> SAVE <kbd>9</kbd> ARP <kbd>0</kbd> SEQ · <kbd>Space</kbd> PLAY <kbd>Enter</kbd> REC · <kbd>-</kbd> <kbd>=</kbd> OCT− OCT+</td></tr>
+    <tr><td>Knobs</td><td>drag up / down, the mouse wheel, or the arrow keys when focused</td></tr>
+    <tr><td>Hold</td><td>a button held on the computer keyboard stays held; with a mouse, <kbd>Shift</kbd>-click holds it until clicked again</td></tr>
+  </table>
+  <h2>What is different from the FM-1</h2>
+  <p>Nothing is saved: projects, presets and settings last until the page is closed. No MIDI, USB audio or firmware updates.
+  The drum track's <b>GEN</b> page (BEAT GEN) is on the DRUMS screen: select track 4 with ALGORITHM, tap SEQ until <b>gen</b> is lit.</p>
+  <p>Rheia is free software (GPL-3.0), based on <a href="https://github.com/isod89/sloop-fm1">SLOOP</a> and
+  <a href="https://github.com/hugelton/Felucca">Felucca</a>. M-VAVE and FM-1 are trademarks of their owners; this project is not affiliated with them.</p>
+</footer>
+<script src="emu.js"></script>
+</body>
+</html>

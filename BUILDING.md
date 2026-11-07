@@ -115,6 +115,22 @@ playback continues. The piano keys and labeled computer keys audition the select
 The audio controls are available only in simulated mode. The physical-device editor continues to use Web MIDI.
 The standalone downloaded HTML editor does not include the WASM asset.
 
+## Emulator (Rheia)
+
+The emulator runs the firmware's sound, sequencer and screens in the browser: the panel's buttons, knobs and keys on
+the page, the screen drawn by the firmware's own code. It needs clang with the wasm32 target and wasm-ld (lld), or
+Emscripten; not the JieLi toolchain.
+
+```sh
+python3 tools/build_emu.py          # build/emu: rheia-emu.wasm and the page (web/emulator)
+node tests/emu_test.mjs             # boots, reaches the GEN page, a written pattern plays
+python3 -m http.server 8766 --bind 127.0.0.1 --directory build/emu
+```
+
+Open `http://localhost:8766/` and press **Power on**. `web/make_site.py` puts it at `webapp/emulator/` when
+`build/emu` has it. The GitHub Actions workflow (`.github/workflows/build.yml`) builds the firmware, the preview
+and the emulator, runs the tests, and publishes the site on GitHub Pages from `main`.
+
 ## Install
 
 On Windows, `INSTALL-SLOOP.bat` builds and opens the web installer (Chrome or Edge). The
