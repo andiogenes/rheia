@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RHEIA_VERSION: "0.5-beta"                         # X.Y[-suffix]: package identity FM-1_9XY (tools/build.py --release)
+  RHEIA_VERSION: "0.6-beta"                         # X.Y[-suffix]: package identity FM-1_9XY (tools/build.py --release)
   SDK_TAG: AC79NN_SDK_V1.2.1_2023-12-13             # the SDK version tools/build.py checks (SDK_SHA256)
   SDK_URL: https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git
 
