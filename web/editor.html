@@ -4273,7 +4273,8 @@ const SMF = {
 
 /* ------------------------------------------- SLOOP 2.5: the song order --- */
 /* The song order lives in the settings object (backup object 1, firmware project.c persist_t): bytes 48..83
-   are arranger.h arr_config_t: count, loop, 2 reserved, then 16 x {scene 0..3 = A..D, bars 1..64}. */
+   are arranger.h arr_config_t: count, loop, 2 reserved (Rheia: the first, the sections' tempo), then 16 x {scene 0..3 =
+   A..D, bars 1..64}. */
 const ARR = {
   OFF: 48, STEPS: 16, SIZE: 36, MAX_BARS: 64, MAGIC: 0x50455233,
   ok: (b) => !!b && b.length >= ARR.OFF + ARR.SIZE && ((b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24)) >>> 0) === ARR.MAGIC,
@@ -4285,7 +4286,8 @@ const ARR = {
   /* the settings bytes with this song order (the rest kept as it was) */
   encode(b, song) {
     const o = Uint8Array.from(b), e = song.entries;
-    o[ARR.OFF] = e.length; o[ARR.OFF + 1] = song.loop ? 1 : 0; o[ARR.OFF + 2] = o[ARR.OFF + 3] = 0;
+    o[ARR.OFF] = e.length; o[ARR.OFF + 1] = song.loop ? 1 : 0; o[ARR.OFF + 3] = 0;   /* (Rheia: byte 2 is each
+                                                    section's tempo, arranger.h arr_tempo: kept as the FM-1 set it) */
     for (let i = 0; i < ARR.STEPS; i++) {
       o[ARR.OFF + 4 + 2 * i] = i < e.length ? e[i].scene : i % 4;
       o[ARR.OFF + 5 + 2 * i] = i < e.length ? e[i].bars : 4;

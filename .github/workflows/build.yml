@@ -83,7 +83,7 @@ jobs:
           python3 tools/build_preview.py
           python3 tools/build_emu.py
 
-      - name: Tests (BEAT GEN, WALL, TREM, the UI, the emulator, the site)
+      - name: Tests (BEAT GEN, WALL, TREM, section tempo, the UI, the emulator, the site)
         run: |
           mkdir -p build/host/ui
           CC="cc -O1 -Wall -Wno-unused-function"
@@ -93,6 +93,10 @@ jobs:
           build/host/wall_test build/host
           cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o build/host/scale_test tests/scale_test.c -lm
           build/host/scale_test > build/host/scale.log && grep "TREM" build/host/scale.log
+          cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o build/host/section_tempo_test tests/section_tempo_test.c -lm
+          build/host/section_tempo_test
+          cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o build/host/song_ui_test tests/song_ui_test.c -lm
+          build/host/song_ui_test
           cc -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o build/host/ui_pages_test tests/ui_pages_test.c -lm
           build/host/ui_pages_test build/host/ui
           node tests/emu_test.mjs build/emu/rheia-emu.wasm

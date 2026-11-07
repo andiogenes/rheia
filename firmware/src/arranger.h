@@ -12,9 +12,27 @@
 #define ARR_INVALID (-3)
 typedef struct { uint8_t scene, bars; } arr_entry_t;
 typedef struct {
-    uint8_t count, loop, reserved[2];
+    uint8_t count, loop, reserved[2];   /* (Rheia) reserved[0]: each section's tempo, 2 bits (arr_tempo); 0 = x1 */
     arr_entry_t entry[ARR_STEPS];
 } arr_config_t;
+/* (Rheia) a section's tempo while it plays: 0 x1, 1 x1/2, 2 x2 (3: as 0). Returned as the factor x2: 2, 1, 4. SLOOP
+ * keeps the byte zero (x1 everywhere) and never reads it */
+enum { ARR_T1, ARR_THALF, ARR_TDOUBLE, ARR_TN };
+static uint32_t arr_tempo(const arr_config_t *c, uint32_t scene)
+{
+    uint32_t v = ((uint32_t)c->reserved[0] >> (2u * (scene & 3u))) & 3u;
+    return v == ARR_THALF ? 1u : v == ARR_TDOUBLE ? 4u : 2u;
+}
+static uint32_t arr_tempo_code(const arr_config_t *c, uint32_t scene)
+{
+    uint32_t v = ((uint32_t)c->reserved[0] >> (2u * (scene & 3u))) & 3u;
+    return v < ARR_TN ? v : ARR_T1;
+}
+static void arr_tempo_set(arr_config_t *c, uint32_t scene, uint32_t code)
+{
+    uint32_t sh = 2u * (scene & 3u);
+    c->reserved[0] = (uint8_t)((c->reserved[0] & ~(3u << sh)) | ((code < ARR_TN ? code : 0u) << sh));
+}
 typedef struct {
     uint32_t phase;
     uint8_t running, index, bar, error;

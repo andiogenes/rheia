@@ -67,11 +67,20 @@ int main(int argc,char **argv)
     enc[EN_K4]=99;song_screen_input(0,0);assert(arrangement.count==16);
     enc[EN_K1]=99;song_screen_input(0,0);assert(song_cursor==15);
     enc[EN_K4]=-99;song_screen_input(0,0);assert(arrangement.count==1 && song_cursor==0);
+    /* (Rheia) PRESETS: the selected entry's section, its tempo x1 -> x2 -> stays, back to x1/2 -> stays; not while playing */
+    arr_defaults(&arrangement);song_cursor=1;
+    enc[EN_PRESET]=1;song_screen_input(0,0);assert(arr_tempo_code(&arrangement,1)==ARR_TDOUBLE && !strcmp(ui.msg,"DOUBLE TIME"));
+    enc[EN_PRESET]=1;song_screen_input(0,0);assert(arr_tempo_code(&arrangement,1)==ARR_TDOUBLE);
+    enc[EN_PRESET]=-1;song_screen_input(0,0);enc[EN_PRESET]=-1;song_screen_input(0,0);
+    assert(arr_tempo_code(&arrangement,1)==ARR_THALF && arr_tempo_code(&arrangement,0)==ARR_T1);
+    song.playing=1;enc[EN_PRESET]=1;song_screen_input(0,0);assert(arr_tempo_code(&arrangement,1)==ARR_THALF);song.playing=0;
+    song_cursor=0;
     arr_defaults(&arrangement);ready=15;ui.msg_t=0;ui.force=1;
     arrangement.entry[0]=(arr_entry_t){0,4};
     arrangement.entry[1]=(arr_entry_t){1,8};
     arrangement.entry[2]=(arr_entry_t){2,8};
     arrangement.entry[3]=(arr_entry_t){3,4};
+    arr_tempo_set(&arrangement,1,ARR_THALF);arr_tempo_set(&arrangement,2,ARR_TDOUBLE);   /* (Rheia: shown on B, C) */
     palette_set(2);song_screen_draw();
     if(argc>1) {
         FILE *f=fopen(argv[1],"wb");assert(f);
@@ -83,6 +92,6 @@ int main(int argc,char **argv)
         }
         fclose(f);
     }
-    puts("song UI: independent plan/scene save, overwrite confirmation, stopped-only changes, missing scene, bounds PASS");
+    puts("song UI: independent plan/scene save, overwrite confirmation, stopped-only changes, missing scene, bounds, (Rheia) section tempo PASS");
     return 0;
 }

@@ -2602,6 +2602,7 @@ static void seq_reset_tracks(uint32_t pos)
 
 
 static void song_backup(void);                     /* project.c: song mode keeps the loop you made */
+static void sec_tempo_leave(void);                 /* (Rheia) arranger_scene.c: the base tempo back at the stop */
 static void song_restore(void);
 
 static void seq_start(void)
@@ -2652,6 +2653,8 @@ static void seq_stop(void)
     }
     seq_out_all_off();
 #if FELUCCA_ARRANGER
+    sec_tempo_leave();                             /* (Rheia) a section's tempo factor ends with the playing (before
+                                                    * the song's restore: in song mode that brings the loop's own BPM) */
     if (arrangement_clock.running) {
         arrangement_clock.running = 0;
         song_restore();                            /* back to the loop you were making */

@@ -24,7 +24,7 @@ UI_SMALL static void song_screen_draw(void)
     const uint16_t *SC = TE_COL;                    /* the tracks' colours (2.7.2: your theme's, when it is on) */
     uint32_t sig = song_cursor + 17u * arrangement_enabled + 37u * song.playing +
                    71u * arrangement_clock.index + 127u * arrangement_clock.bar +
-                   257u * arrangement.count + 509u * song.g[G_BPM];
+                   257u * arrangement.count + 509u * song.g[G_BPM] + 1021u * arrangement.reserved[0];
     char b[30];
     for (i = 0; i < arrangement.count; i++)
         sig = sig * 31u + arrangement.entry[i].scene + 7u * arrangement.entry[i].bars;
@@ -59,7 +59,16 @@ UI_SMALL static void song_screen_draw(void)
             cv_rect(60, 9, w, 8, used ? (selected ? sc : TE_G2) : TE_G1);
             fmt_int(b, e->bars);
             str_cpy(b + str_len(b), e->bars == 1 ? " bar" : " bars", 8);
-            cv_text(60 + w + 6, 5, &FONT_S, used ? b : "empty", selected ? C_WHITE : TE_G3);
+            {   /* (Rheia) the section's tempo: x1/2 or x2 after its bars (Latin-1: the font has both) */
+                uint32_t tc = arr_tempo_code(&arrangement, e->scene);
+                int32_t tx;
+                if (used && tc)
+                    str_cpy(b + str_len(b), tc == ARR_THALF ? " \xD7\xBD" : " \xD7" "2", 8);
+                tx = 60 + w + 6;
+                if (tx + text_w(&FONT_S, used ? b : "empty") > 222)
+                    tx = 222 - text_w(&FONT_S, used ? b : "empty");   /* (a long section: over its bar's end) */
+                cv_text(tx, 5, &FONT_S, used ? b : "empty", selected ? C_WHITE : TE_G3);
+            }
             if (arrangement_clock.running && arrangement_clock.index == pos) {
                 cv_rect(60, 19, (int32_t)(arrangement_clock.bar + 1u) * w / (e->bars ? e->bars : 1), 2, C_WHITE);
                 cv_rect(226, 9, 9, 9, SC[1]);
@@ -79,7 +88,7 @@ UI_SMALL static void song_screen_draw(void)
             cv_text((int32_t)i * 60 + 30 - text_w(&FONT_S, L[i]) / 2, 12, &FONT_S, L[i], TE_G3);
         }
     }
-    cv_text(4, 34, &FONT_S, "rec: store   save: chain", TE_G4);
+    cv_text(4, 34, &FONT_S, "rec:store save:chain pre:time", TE_G4);   /* (Rheia: PRESETS, the tempo) */
     cv_text(4, 50, &FONT_S, "oct-: loop/song  oct+ x2: load", TE_G3);
     cv_blit(0, 172);
 }
@@ -149,6 +158,21 @@ UI_SMALL static void song_screen_input(uint32_t pressed, uint32_t home)
             if (song_cursor >= arrangement.count) song_cursor = arrangement.count - 1;
         }
     }
+    /* (Rheia) PRESETS: the selected entry's section, its tempo while it plays: x1 -> x1/2 -> x2 (a turn a step) */
+    if ((steps = panel_enc(EN_PRESET)) != 0) {
+        uint32_t scene = arrangement.entry[song_cursor].scene, c = arr_tempo_code(&arrangement, scene);
+        static const uint8_t ORDER[ARR_TN] = {ARR_THALF, ARR_T1, ARR_TDOUBLE};   /* (left to right: slower .. faster) */
+        uint32_t pos = c == ARR_THALF ? 0u : c == ARR_T1 ? 1u : 2u;
+        song_store_armed = 0;
+        song_load_armed = 0;
+        if (song.playing || transport_req) {
+            ui_message("STOP FIRST");
+        } else {
+            pos = (uint32_t)clamp((int32_t)pos + (steps > 0 ? 1 : -1), 0, 2);
+            arr_tempo_set(&arrangement, scene, ORDER[pos]);
+            ui_message(ORDER[pos] == ARR_THALF ? "HALF TIME" : ORDER[pos] == ARR_TDOUBLE ? "DOUBLE TIME" : "TEMPO X1");
+        }
+    }
     /* Unused encoders have no hidden action on this screen. */
-    panel_enc(EN_SELECT); panel_enc(EN_ALGO); panel_enc(EN_PRESET);
+    panel_enc(EN_SELECT); panel_enc(EN_ALGO);
 }

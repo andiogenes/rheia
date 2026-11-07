@@ -994,6 +994,11 @@ sys.stdout.buffer.write(hd+t1+b'MTrk'+struct.pack('>I',len(tr))+tr)`);
   const enc = ARR.encode(sb, { loop: true, entries: ARR.expand(rows) });
   ok(js(ARR.decode(enc)) === js({ loop: true, entries: ARR.expand(rows) }) && enc.subarray(0, 48).every((v, i) => v === sb[i]) && enc.subarray(84).every((v, i) => v === sb[84 + i]),
     "song: encode keeps the rest of the settings");
+  {   /* (Rheia) byte 2 of the song order: each section's tempo (arranger.h arr_tempo), kept through the editor */
+    const t = Uint8Array.from(sb); t[ARR.OFF + 2] = 0x61;   /* A x1/2, C x2, D x1/2 */
+    const e2 = ARR.encode(t, { loop: false, entries: [{ scene: 3, bars: 2 }] });
+    ok(e2[ARR.OFF + 2] === 0x61 && e2[ARR.OFF + 3] === 0, "song: encode keeps the sections' tempo byte (Rheia)");
+  }
   ok(!ARR.valid({ entries: [] }) && !ARR.valid({ entries: Array(17).fill({ scene: 0, bars: 1 }) }) && !ARR.valid({ entries: [{ scene: 4, bars: 1 }] })
     && !ARR.valid({ entries: [{ scene: 0, bars: 65 }] }) && ARR.valid({ entries: Array(16).fill({ scene: 3, bars: 64 }) }), "song: valid == arranger.h arr_valid (1..16 entries, A..D, 1..64 bars)");
   const pc = readFileSync(join(HERE, "../firmware/src/project.c"), "utf8"), ah = readFileSync(join(HERE, "../firmware/src/arranger.h"), "utf8");

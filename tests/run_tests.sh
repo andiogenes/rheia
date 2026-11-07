@@ -48,6 +48,9 @@ run "Rheia BEAT GEN: styles, options, lengths, fills, humanise, seeds" "$OUT/bea
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o "$OUT/wall_test" tests/wall_test.c -lm
 run "Rheia WALL: BUZZ SLAB SHRED bounded, level-matched, their character, the gate, dry when off" "$OUT/wall_test" "$OUT"
 
+$CC -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o "$OUT/section_tempo_test" tests/section_tempo_test.c -lm
+run "Rheia section tempo: x1/2 x1 x2 in song mode and live, bars at each tempo, the base back at STOP" "$OUT/section_tempo_test"
+
 $CC -o "$OUT/arranger_test" tests/arranger_test.c
 run "song order, timing, repeats and missing scenes" "$OUT/arranger_test"
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/song_audio_test" tests/song_audio_test.c -lm

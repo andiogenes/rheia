@@ -27,7 +27,7 @@ static uint32_t section_bars(uint32_t s)
 
 /* Called only at an audio-block boundary, after validation of all slots at
  * start. The song keeps one tempo and global FX across every section (only the drum
- * level and reverb come from it). */
+ * level and reverb come from it; Rheia: times the section's own factor, sec_tempo_enter). */
 static void arrangement_apply(uint32_t scene)
 {
     uint32_t k;
@@ -41,6 +41,7 @@ static void arrangement_apply(uint32_t scene)
         t->rskip_lanes = 0;
     }
     proj_apply(&proj_slot[scene], 0);
+    sec_tempo_enter(scene);
     sync_reload = 1;
     ui.force = 1;
 }
