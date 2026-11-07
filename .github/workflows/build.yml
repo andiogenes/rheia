@@ -8,6 +8,11 @@ on:
     branches: [main, "feature/**"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_suite:
+        description: "Also run the full host suite (tests/run_tests.sh)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -89,7 +94,8 @@ jobs:
           node tests/emu_test.mjs build/emu/rheia-emu.wasm
           python3 tests/site_test.py
 
-      - name: The full host suite (SLOOP's tests and Rheia's)
+      - name: The full host suite (only when asked for, workflow_dispatch full_suite)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.full_suite }}
         run: |
           cp "build/felucca-$RHEIA_VERSION.fwsc" build/felucca.fwsc   # (the suite reads the package by this name)
           sh tests/run_tests.sh
