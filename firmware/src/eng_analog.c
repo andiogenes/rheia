@@ -156,6 +156,15 @@ static const preset_t ANALOG_PRESETS[] = {
      XP(P_LD_PIT + 1, 1, P_LRATE + 1, 80, P_LFADE + 1, 60, P_GLIDE + 1, 30)},
     {"SAW BASS", {0, 6, 64, 0, 52, 30, 40, 64}, {0, 60, 60, 20}, 30, 1, FX(8, 0, 0, 4), XP(P_TRANS + 1, -24)},
     {"SINE PAD", {3, 10, 64, 4, 90, 0, 0, 32}, {80, 90, 118, 90}, 0, 0, FX(0, 60, 20, 65)},
+    /* (Rheia) heavy music. Hold a chord: TREM (arp mode 15) picks it again at 1/32 (rate 3) or 1/16 (rate 2), the
+     * INSERT's WALL voicings (P_ITYPE 9 BUZZ, 10 SLAB) after it: a black-metal tremolo wall, a blackgaze wash, a
+     * thick industrial bass */
+    {"TREM GRAVE", {0, 18, 64, 0, 70, 10, 20, 32}, {0, 70, 118, 30}, 0, 0, FX(0, 30, 10, 70), ARP(15, 3, 1, 90),
+     XP(P_ITYPE + 1, 9, P_IA + 1, 96, P_IC + 1, 24, P_IMIX + 1, 127)},
+    {"GAZE WASH", {0, 25, 64, 10, 80, 6, 0, 32}, {40, 90, 120, 100}, 0, 0, FX(0, 80, 40, 100), ARP(15, 2, 1, 110),
+     XP(P_ITYPE + 1, 9, P_IA + 1, 36, P_IB + 1, 74, P_IMIX + 1, 70)},
+    {"SLAB BASS", {0, 6, 64, 0, 60, 20, 60, 64}, {0, 70, 110, 20}, 10, 1, FX(0, 0, 0, 4),
+     XP(P_ITYPE + 1, 10, P_IA + 1, 100, P_IC + 1, 20, P_TRANS + 1, -12)},
 };
 
 /* (after Clipper 1.2) UNISON (voice.c unison_spread): both oscillators moved by r (Q32) of a turn of the note,

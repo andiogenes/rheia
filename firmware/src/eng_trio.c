@@ -375,6 +375,12 @@ static const preset_t TRIO_PRESETS[] = {
     {"SQR LEAD", {1, 0, 12, 4, 0, 90, 20, 50}, {2, 70, 110, 30}, 10, 1, FX(0, 10, 28, 22), XP(P_GLIDE + 1, 40)},
     {"POWER STAB", {0, 7, 12, 8, 0, 85, 25, 64}, {0, 70, 50, 36}, 30, 0, FX(16, 10, 20, 25)},
     {"PULSE PAD", {1, 0, 12, 20, 0, 70, 10, 30}, {60, 90, 115, 85}, 0, 0, FX(0, 50, 20, 60), XP(P_LD_SHP + 1, 25, P_LRATE + 1, 30)},
+    /* (Rheia) heavy music, through the INSERT's WALL voicings (P_ITYPE 10 SLAB, 11 SHRED): a spitting sync lead for
+     * grind, three detuned saws an octave down for a sludge crawl */
+    {"SPAZZ LEAD", {9, 7, 12, 5, 0, 90, 50, 64}, {0, 50, 60, 20}, 30, 1, FX(0, 0, 20, 20),
+     XP(P_ITYPE + 1, 11, P_IA + 1, 90, P_IC + 1, 30, P_GLIDE + 1, 20)},
+    {"PILE CRAWL", {0, 0, -12, 12, 0, 55, 30, 64}, {0, 80, 120, 40}, 0, 1, FX(0, 0, 0, 20),
+     XP(P_ITYPE + 1, 10, P_IA + 1, 110, P_IC + 1, 20, P_TRANS + 1, -12)},
 };
 
 /* (after Clipper 1.2) UNISON (voice.c unison_spread): the three oscillators moved by r (Q32) of a turn of the
