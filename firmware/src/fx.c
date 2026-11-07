@@ -888,6 +888,66 @@ static void dust_process(int32_t *l, int32_t *r, uint32_t n)
     }
 }
 
+/* ---- (Rheia) ROT: the master on a worn tape. G_ROT 0..127 turns up together: wow (a slow ~0.6 Hz sway of the pitch,
+ * up to about +-25 cents), flutter (a fast ~9 Hz shiver, up to about +-8 cents), the highs lost (a one-pole low-pass,
+ * open -> ~5 kHz), and dropouts (the oxide worn off: the level sinks for 30 .. 110 ms; none below ~20, up to about one a
+ * second at 127, deeper as ROT goes up). A short stereo line (23 ms) read at a moving delay around 8 ms. ROT 0 and faded out: the mix bit for bit as
+ * before (nothing runs); turning it on or off crossfades over ~45 ms (no step from the line's 8 ms). 4 KiB of RAM. */
+#define ROT_LEN 1024u
+#define ROT_BASE (353u << 16)                           /* 8 ms, Q16 samples */
+static struct {
+    int16_t l[ROT_LEN], r[ROT_LEN];                     /* the tape, at a quarter (headroom) */
+    uint32_t wp, wow, flu;                              /* write position, the two phases */
+    int32_t rnd, g, drop, low, lpl, lpr, mix;           /* noise; gain Q15; samples of dropout left, its floor; low-passes;
+                                                         * the wet share, Q15 */
+} rot = {.rnd = 0x51A3C0DE, .g = 32767};
+static void rot_process(int32_t *l, int32_t *r, uint32_t n)
+{
+    int32_t a = clamp(song.g[G_ROT], 0, 127), tmix = a ? 32767 : 0, k, wd, fd, pc, i;
+    if (!a && !rot.mix)
+        return;                                         /* off: bit for bit */
+    if (!rot.mix) {                                     /* starting: an empty tape, no dropout */
+        memset(rot.l, 0, sizeof rot.l);
+        memset(rot.r, 0, sizeof rot.r);
+        rot.g = 32767, rot.drop = 0, rot.lpl = rot.lpr = 0;
+    }
+    k = 32767 - a * 200;                                /* tape loss: one-pole, Q15 (open .. ~5 kHz) */
+    wd = a * 343;                                       /* wow depth, Q8 samples: up to 170 (3.9 ms: +-25 cents at 0.6 Hz) */
+    fd = a * 7;                                         /* flutter depth, Q8: up to 3.5 samples (+-8 cents at 9 Hz) */
+    pc = a * a / 42;                                    /* dropout chance a sample, x 2^-24: none at 20, ~one a second at 127 */
+    for (i = 0; i < (int32_t)n; i++) {
+        uint32_t nz = noise32(&rot.rnd), d, rp, fr;
+        int32_t x0, x1, wl, wr;
+        rot.mix += clamp(tmix - rot.mix, -16, 16);      /* (~45 ms either way) */
+        rot.l[rot.wp] = (int16_t)clamp(l[i] >> 2, -32767, 32767);
+        rot.r[rot.wp] = (int16_t)clamp(r[i] >> 2, -32767, 32767);
+        rot.wow += 58434u;                              /* 0.6 Hz */
+        rot.flu += 876524u;                             /* 9 Hz */
+        d = (uint32_t)((int32_t)ROT_BASE + (((osc_sine(rot.wow) * wd) >> 15) << 8) +   /* (32 bits: |sine| < 2^15, */
+                       (((osc_sine(rot.flu) * fd) >> 15) << 8));                       /* wd, fd < 2^16) */
+        rp = (rot.wp - (d >> 16)) & (ROT_LEN - 1u);
+        fr = (d >> 1) & 0x7FFFu;                        /* (the fraction, Q15: reading toward the older one) */
+        x0 = rot.l[rp], x1 = rot.l[(rp - 1u) & (ROT_LEN - 1u)];
+        wl = x0 + (((x1 - x0) * (int32_t)fr) >> 15);
+        x0 = rot.r[rp], x1 = rot.r[(rp - 1u) & (ROT_LEN - 1u)];
+        wr = x0 + (((x1 - x0) * (int32_t)fr) >> 15);
+        rot.wp = (rot.wp + 1u) & (ROT_LEN - 1u);
+        if (!rot.drop && (int32_t)(nz >> 8) < pc) {     /* a dropout: 30 .. 110 ms, down to 1 - a / 160 */
+            rot.drop = 1323 + (int32_t)((nz & 0xFFu) * 14);
+            rot.low = 32767 - a * 205 + (int32_t)((nz >> 24) & 0x3Fu) * 64;
+        }
+        rot.g += (((rot.drop ? rot.low : 32767) - rot.g) >> 7);   /* (~3 ms in and out) */
+        if (rot.drop)
+            rot.drop--;
+        rot.lpl += mulq15(wl - rot.lpl, k);
+        rot.lpr += mulq15(wr - rot.lpr, k);
+        wl = mulq15(rot.lpl, rot.g) << 2;
+        wr = mulq15(rot.lpr, rot.g) << 2;
+        l[i] += ((clamp(wl - l[i], -262143, 262143) >> 2) * rot.mix) >> 13;   /* (32 bits: a loud mix's difference) */
+        r[i] += ((clamp(wr - r[i], -262143, 262143) >> 2) * rot.mix) >> 13;
+    }
+}
+
 static void djf_process(int32_t *l, int32_t *r, uint32_t n)
 {
     tsvf_t c;
@@ -1313,6 +1373,7 @@ static void mix_block(int32_t *out, uint32_t n)
         mix_r[i] += wet_r[i];
     }
     dust_process(mix_l, mix_r, n);
+    rot_process(mix_l, mix_r, n);                      /* (Rheia) ROT: after DUST (the sampler, then the tape) */
     punch_process(mix_l, mix_r, n);
     djf_process(mix_l, mix_r, n);
     m1 = (int32_t)song.master_q12;

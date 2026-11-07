@@ -41,7 +41,8 @@
                                                 * so the format and its size do not change */
 _Static_assert(G_DRDLY == PROJ_NG && G_TXSRC == PROJ_NG + 5u,
                "the globals a project holds, then G_DRDLY (then 2.6's GLO > MIDI: settings of the FM-1)");
-_Static_assert(G_FXFADE == G_CLKOUT + 1u && G_COUNT == G_FXFADE + 1u, "G_FXFADE (2.7.2) is the last global, a setting of the FM-1");
+_Static_assert(G_FXFADE == G_CLKOUT + 1u && G_ROT == G_FXFADE + 1u && G_COUNT == G_ROT + 1u,
+               "G_FXFADE (2.7.2), a setting of the FM-1; then (Rheia) G_ROT, the last global, in a project with TEXTURE");
 #define PROJ_NC6 ((uint32_t)P_ITYPE)           /* format 6: the parameters kept in 16 bits, P_LEVEL .. P_VLEAD (as 5), */
 #define PROJ_NX6 ((uint32_t)(P_E0 - P_ITYPE))  /* the 2.6 ones in a byte (0..127), then P_E0 .. P_E7 */
 _Static_assert(PROJ_NC6 == PROJ_NP_V5 - 8u && PROJ_NX6 == 10u, "format 6: format 5's parameters, then ten bytes");
@@ -399,7 +400,7 @@ UI_SMALL static void proj_tx_put(project_t *p)
                           ((uint32_t)song.g[G_TXDUCK] & 1u) << 5 | 0x40u);   /* (0x40: saved by 2.7 or later) */
     p->rsv[1] = (uint8_t)song.g[G_TXRATE];
     p->g[G_DRCH] = (int16_t)((song.g[G_TXLVL] & 127) | ((song.g[G_TXTONE] + 64) & 127) << 7);
-    p->g[G_INFO] = song.g[G_TXMOVE];
+    p->g[G_INFO] = (int16_t)((song.g[G_TXMOVE] & 127) | (song.g[G_ROT] & 127) << 7);   /* (Rheia: ROT above MOVE) */
 }
 static void proj_tx_get(const project_t *p)
 {
@@ -411,10 +412,11 @@ static void proj_tx_get(const project_t *p)
             v[i] = GP[ID[i]].def;
     } else {
         v[0] = p->rsv[0] & 15u, v[5] = (p->rsv[0] >> 4) & 1u, v[6] = (p->rsv[0] >> 5) & 1u, v[4] = p->rsv[1];
-        v[1] = p->g[G_DRCH] & 127, v[2] = ((p->g[G_DRCH] >> 7) & 127) - 64, v[3] = p->g[G_INFO];
+        v[1] = p->g[G_DRCH] & 127, v[2] = ((p->g[G_DRCH] >> 7) & 127) - 64, v[3] = p->g[G_INFO] & 127;
     }
     for (i = 0; i < 7u; i++)
         song.g[ID[i]] = (int16_t)clamp(v[i], GP[ID[i]].min, GP[ID[i]].max);
+    song.g[G_ROT] = (int16_t)((p->rsv[0] & 0x80u) ? (p->g[G_INFO] >> 7) & 127 : 0);   /* (Rheia: 0 in older projects) */
 }
 
 /* (2.7) the DRUMS screen's SOUND page in a project: each sound's TUNE (4 bits) and DECAY (3 bits), two's complement

@@ -2967,6 +2967,7 @@ function makeMockDevice(opt = {}) {
     E("REMOTE", ["OFF", ...Array.from({ length: 16 }, (_, i) => String(i + 1))], 0),   /* GLO > MIDI 3 (2.7): the buttons */
     E("CLOCK", ["OFF", "OUT"], 0),                   /* GLO > MIDI 3 (2.7): MIDI clock, START / STOP out on USB */
     D("FADE", F.INT, 0, 15, 0),                      /* GLO > MASTER 2 (2.7.2): the punch-in FX fade (punch.c) */
+    D("ROT", F.PCT, 0, 127, 0),                      /* (Rheia) GLO > MASTER 2: tape wear on the master (fx.c rot_process) */
   ];
   /* the drum track's P_E0: its kit (drums.c DRUM_KIT_NAMES; 5 = 808, the power-on kit) */
   const KIT = E("KIT", ["ACOUSTIC", "DEEP", "TIGHT", "BRIGHT", "DUST", "808", "909", "606", "80S", "VINTAGE", "TRAP", "DRILL", "BOOMBAP", "LO-FI", "PHONK", "HOUSE", "D.HOUSE", "TECHNO", "MINIMAL", "ELECTRO", "DISCO", "GARAGE", "JUNGLE", "DUBSTEP", "DEMBOW", "AMAPIANO", "AFRO", "LATIN", "TRIBAL", "SYNTHWV", "CHIP", "ARCADE", "GLITCH", "INDUSTR", "HYPER", "AMBIENT", "JAZZ", "USR1", "USR2", "USR3", "USR4", "USR3+4", "SYN1", "SYN2", "SYN3", "SYN4", "BLAST", "MACHINE", "SPAZZ"], 0);
@@ -5908,7 +5909,7 @@ const stepEdit = new Map(); /* index -> time of the last edit */
 
 /* parameter ids (firmware/src/core.h); used only when P_COUNT / G_COUNT match */
 /* pcount 71 / pe0 63: 2.6's INSERT, filter TYPE, ENV SYNC, LFO 2 (P_ITYPE 53 .. P_LPOL 62, after Felucca 1.4 / 1.5) */
-const EXPECT = { pcount: [61, 71], gcount: [32, 33, 45, 46, 47, 48, 49, 50], pe0: [53, 63] };   /* gcount 33: 2.5's drum DLY (G_DRDLY); 45: 2.6's GLO > MIDI, TEXTURE, BEND; 46: 2.7's FX CH; 47: DR MAP; 48: REMOTE; 49: CLK OUT; 50: 2.7.2's FX FADE */
+const EXPECT = { pcount: [61, 71], gcount: [32, 33, 45, 46, 47, 48, 49, 50, 51], pe0: [53, 63] };   /* (Rheia) 51: ROT */   /* gcount 33: 2.5's drum DLY (G_DRDLY); 45: 2.6's GLO > MIDI, TEXTURE, BEND; 46: 2.7's FX CH; 47: DR MAP; 48: REMOTE; 49: CLK OUT; 50: 2.7.2's FX FADE */
 const P = { LEVEL: 0, SLEN: 29, CHORD: 49 };
 const LAYOUT = (pe0) => {
   const v251 = pe0 >= 63;                         /* (2.6: the pages the device has for the new parameters) */
@@ -5925,7 +5926,7 @@ const LAYOUT = (pe0) => {
     { t: "ARP", pages: [["ARP", 0, [17, 18, 19, 20]], ["ARP 2", 0, [21, 22, 23, 24]]] },
     { t: "SEQ PATTERN", tab: "seqgroups", pages: [["PATTERN", 0, [29, 30, 31, 32]]] },
     { t: "GLOBAL", tab: "setgroups", pages: [["GLOBAL", 1, [0, 1, 2, 3]]] },
-    { t: "MASTER", tab: "setgroups", pages: [["MASTER", 1, [27, 28, 29, 30]]] },
+    { t: "MASTER", tab: "setgroups", pages: [["MASTER", 1, [27, 28, 29, 30]], ["MASTER 2", 1, [50]]] },   /* (Rheia) ROT */
     { t: "DRUMS", tab: "setgroups", pages: [["DRUMS", 1, [24, 25, 26, 32]]] },
     ...opt(v251, { t: "MIDI", tab: "setgroups", pages: [["MIDI", 1, [33, 34, 35, 24]], ["MIDI 2", 1, [14, 36, 12, 44]], ["MIDI 3", 1, [45, 46, 47, 48]]] }),   /* CH1 CH2 CH3 CH4 (drums);
                                                      * IN OTHER OUT BEND (settings of the FM-1; IN and OUT: the FM-1 only, G_SKIP) */

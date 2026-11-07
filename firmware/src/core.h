@@ -105,6 +105,8 @@ enum {                          /* global parameters */
                                  * while SYNC is INT (seq.c clkout_block; a setting of the FM-1, kept in DR MAP's byte) */
     G_FXFADE,                   /* SLOOP 2.7.2, the FX layer (FX held), SELECT: how fast a punch-in FX fades in and out, 0 (instant, as
                                  * before) .. 15 (punch.c; a setting of the FM-1, kept in BEND's byte) */
+    G_ROT,                      /* (Rheia) GLO > MASTER 2: ROT, tape wear on the master (fx.c rot_process): wow, flutter, dropouts,
+                                 * the highs lost; 0 off. In a project (project.c: with TEXTURE's MOVE, the bits above it) */
     G_COUNT
 };
 
