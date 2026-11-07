@@ -3,7 +3,7 @@
 /* Felucca user interface. Four columns map to KNOB 1..4. Rendering is lazy:
  * every element remembers what it last drew and is redrawn only on change. */
 #ifndef FELUCCA_VERSION
-#define FELUCCA_VERSION "SLOOP 2.8.5"  /* the beat machine firmware for the FM-1 (based on Felucca) */
+#define FELUCCA_VERSION "RHEIA DEV"    /* (Rheia; release builds: tools/build.py --release X.Y) on SLOOP 2.8.5 */
 #endif
 static void project_save(uint32_t slot);
 static void arrangement_save(void);
@@ -278,6 +278,9 @@ UI_SMALL static int undo_swap(int redo)
     len = t->p[P_SLEN];
     t->p[P_SLEN] = undo.len;
     undo.len = len;
+    len = t->p[P_SDIV];                                  /* (Rheia) the DIV with it */
+    t->p[P_SDIV] = undo.div;
+    undo.div = len;
     undo.undone = (uint8_t)!redo;
     fm1_irq_on();
     sync_reload = 1;
@@ -888,12 +891,21 @@ UI_SMALL static void fav_toggle(int add)                      /* KNOB 4 on the P
 /* (2.7) the settings' side record: the theme (40 bytes, zero: none), then the favourites (ui.c fav) with a magic and a
  * CRC. A 2.7 beta wrote the theme alone (the rest erased: no favourites); an older SLOOP never reads it */
 #define FAVS_MAGIC 0x31564146u                      /* "FAV1" */
+/* (Rheia) after them, the GEN page's settings (beatgen.c bg_ui, 12 bytes) with their own magic and CRC: SLOOP reads the
+ * first 80 bytes only; a copy written before has the rest erased (0xFF: no magic), and GEN keeps its defaults */
+#define GEN_MAGIC 0x314E4547u                       /* "GEN1" */
+#define GEN_BYTES 12u
 typedef struct {
     theme_t th;
     uint32_t fmagic;
     uint16_t fav[FAV_N];
     uint32_t fcrc;
+    uint32_t gmagic;
+    uint8_t gen[GEN_BYTES];
+    uint32_t gcrc;
 } side_rec_t;
+static void bg_store(uint8_t *b);                    /* beatgen.c: the settings into GEN_BYTES bytes, and back */
+static int bg_restore(const uint8_t *b);
 UI_SMALL static void side_fill(side_rec_t *r)                /* what the settings' side record holds now */
 {
     memset(r, 0, sizeof *r);
@@ -902,6 +914,9 @@ UI_SMALL static void side_fill(side_rec_t *r)                /* what the setting
     r->fmagic = FAVS_MAGIC;
     memcpy(r->fav, fav, sizeof fav);
     r->fcrc = st_crc32(&r->fmagic, 4u + sizeof r->fav);
+    r->gmagic = GEN_MAGIC;
+    bg_store(r->gen);
+    r->gcrc = st_crc32(&r->gmagic, 4u + sizeof r->gen);
 }
 UI_SMALL static void side_take(side_rec_t *r)                /* a side record read back: what checks out (theme, favourites) */
 {
@@ -911,6 +926,8 @@ UI_SMALL static void side_take(side_rec_t *r)                /* a side record re
     }
     if (r->fmagic == FAVS_MAGIC && r->fcrc == st_crc32(&r->fmagic, 4u + sizeof r->fav))
         memcpy(fav, r->fav, sizeof fav);
+    if (r->gmagic == GEN_MAGIC && r->gcrc == st_crc32(&r->gmagic, 4u + sizeof r->gen))
+        bg_restore(r->gen);
 }
 /* the PRESETS list: the favourites, then every factory sound by kind, then the user presets */
 UI_SMALL static uint32_t preset_pos(uint32_t *total)

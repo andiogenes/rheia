@@ -447,7 +447,7 @@ static uint32_t trk_len(const track_t *t) { return t->p[P_SLEN] > 0 ? (uint32_t)
  * recording pass, erase, step edit, tool or clear (a session: one mark). EDIT + OCT- / OCT+. */
 static struct {
     uint8_t valid, undone, trk;
-    int16_t len;
+    int16_t len, div;                                    /* (Rheia) the DIV too: BEAT GEN sets it */
     uint32_t sess;
     step_t st[NSTEP];
     int8_t micro[NSTEP];                                 /* (2.7) the nudges too (REC QUANT OFF writes them) */
@@ -461,6 +461,7 @@ static void undo_mark(const track_t *t, uint32_t sess)
     memcpy(undo.st, t->step, sizeof undo.st);
     memcpy(undo.micro, t->micro, sizeof undo.micro);
     undo.len = t->p[P_SLEN];
+    undo.div = t->p[P_SDIV];
     undo.trk = (uint8_t)i;
     undo.sess = sess;
     undo.valid = 1;

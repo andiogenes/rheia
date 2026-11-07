@@ -650,6 +650,7 @@ int main(int argc, char **argv)
         int16_t keep_len = TDRUM->p[P_SLEN];
         uint16_t seed;
         studio_open(SC_DRUM); drum_page = 0; frames(2);
+        TDRUM->p[P_SDIV] = 1;                         /* (1/8: the write sets 1/16, the undo brings 1/8 back) */
         memcpy(keep, TDRUM->dstep, sizeof keep);
         encs[panel.enc[EN_SELECT]] = 9; frame();
         check(on_drum_page() && drum_page == 3u, "DRUMS: SELECT reaches GEN, the last page");
@@ -675,8 +676,15 @@ int main(int argc, char **argv)
         check(dstep_has(&TDRUM->dstep[4], 2) && dstep_has(&TDRUM->dstep[6], 0) && dstep_has(&TDRUM->dstep[31], 2) &&
               dstep_rat(&TDRUM->dstep[31], 2) == 1u, "GEN: the D-beat, its snare fill into 32nds");
         check(bg_ui.seed == (uint16_t)(seed + 1u), "GEN: the next write is another take");
+        check(fav_dirty, "GEN: a write marks the settings to be kept (the side record, when quiet)");
+        fav_dirty = 0;
         undo_swap(0);
-        check(memcmp(keep, TDRUM->dstep, sizeof keep) == 0 && TDRUM->p[P_SLEN] == keep_len, "GEN: one undo brings the old pattern back");
+        check(memcmp(keep, TDRUM->dstep, sizeof keep) == 0 && TDRUM->p[P_SLEN] == keep_len && TDRUM->p[P_SDIV] == 1,
+              "GEN: one undo brings the old pattern back, its length and DIV");
+        undo_swap(1);
+        check(TDRUM->p[P_SLEN] == 32 && TDRUM->p[P_SDIV] == 2, "GEN: redo writes it again, 1/16");
+        undo_swap(0);
+        TDRUM->p[P_SDIV] = 2;
         drum_page = 0; ui.force = 1; frame();
     }
     {   /* the free take screens */
@@ -1924,6 +1932,37 @@ int main(int argc, char **argv)
         side_take(&r);
         ok &= fav[0] == FAV_NONE;
         check(ok, "2.7 favourites: kept in the settings' side record after the theme; a beta's record or a damaged one: none");
+    }
+    {   /* (Rheia) the GEN page's settings in the side record after SLOOP's 80 bytes: kept; a SLOOP record (erased after
+         * the favourites), a damaged one or impossible values: the settings stay as they are */
+        side_rec_t r;
+        bg_cfg_t keep = bg_ui, set = {BG_CRAWL, 4, BG_KICK_DOUBLE, BG_CYM_CRASH, BG_CRATE_4, BG_FILL_TOMS, 0, 3, 777};
+        int ok;
+        bg_ui = set; bg_kset = 1;
+        side_fill(&r);
+        bg_ui = keep; bg_kset = 0;
+        side_take(&r);
+        ok = !memcmp(&bg_ui, &set, sizeof set) && bg_kset == 1u;
+        bg_ui = keep; bg_kset = 0;
+        memset((uint8_t *)&r + 80, 0xFF, sizeof r - 80);   /* (what SLOOP's save leaves there) */
+        side_take(&r);
+        ok &= !memcmp(&bg_ui, &keep, sizeof keep) && bg_kset == 0u;
+        bg_ui = set;
+        side_fill(&r);
+        r.gen[2] ^= 6u;                                    /* (damaged: its CRC) */
+        bg_ui = keep;
+        side_take(&r);
+        ok &= !memcmp(&bg_ui, &keep, sizeof keep);
+        bg_ui = set;
+        side_fill(&r);
+        r.gen[1] = 200;                                    /* (a style this build does not have, CRC made right) */
+        r.gcrc = st_crc32(&r.gmagic, 4u + sizeof r.gen);
+        bg_ui = keep;
+        side_take(&r);
+        ok &= !memcmp(&bg_ui, &keep, sizeof keep);
+        check(ok, "Rheia GEN settings: kept in the side record after SLOOP's part; SLOOP's, damaged or impossible: unchanged");
+        check(sizeof r == 100u && __builtin_offsetof(side_rec_t, gmagic) == 80u, "Rheia side record: SLOOP's 80 bytes first");
+        bg_kset = 0;
     }
     {   /* 2.7: the editor's LIVE page (protocol v12, LIVE = 77): the FM-1's own code for each control; the reply */
         int ok = 1, bpm;

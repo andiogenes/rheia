@@ -458,10 +458,19 @@ UI_SMALL static void drum_screen_draw(void)
             }
         } else if (drum_page == 3u) {                  /* (Rheia) GEN: the first bar of the pattern OCT+ would write */
             static const uint8_t GL[8] = {BG_L_CRASH, BG_L_RIDE, BG_L_OPEN, BG_L_HAT, BG_L_TOM_H, BG_L_TOM_L, BG_L_SNARE, BG_L_KICK};
+            /* each row's letter, 5 x 7 (the fonts are 16 high, a row 12): Crash Ride Open Hat Tom (high) Low tom Snare Kick */
+            static const uint8_t GLYPH[8][7] = {
+                {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}, {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11},
+                {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}, {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11},
+                {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}, {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F},
+                {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}, {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}};
             const bg_pat_t *pv = bg_preview();
             for (i = 0; i < 8u; i++) {
-                int32_t y = (int32_t)i * 12 + 2;
-                cv_rect(2, y, 6, 10, pad_lit[GL[i]] ? C_WHITE : TE_G2);
+                int32_t y = (int32_t)i * 12 + 2, gy, gx;
+                for (gy = 0; gy < 7; gy++)
+                    for (gx = 0; gx < 5; gx++)
+                        if ((GLYPH[i][gy] >> (4 - gx)) & 1u)
+                            cv_rect(3 + gx, y + 1 + gy, 1, 1, pad_lit[GL[i]] ? C_WHITE : TE_G3);
                 for (j = 0; j < 16u; j++) {
                     const dstep_t *s = &pv->st[j];
                     uint32_t l = GL[i];

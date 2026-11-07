@@ -303,6 +303,27 @@ UI_SMALL static void bg_dials(const char **lab, char val[4][12], int32_t ratio[4
         ratio[3] = bg_ui.accent ? 1000 : 0;
     }
 }
+/* the settings in the settings' side record (ui.c side_fill / side_take): 12 bytes, every value checked on the way back */
+static void bg_store(uint8_t *b)
+{
+    memset(b, 0, GEN_BYTES);
+    b[0] = 1;                                            /* (the layout's version) */
+    b[1] = bg_ui.style, b[2] = bg_ui.bars, b[3] = bg_ui.kick, b[4] = bg_ui.cym, b[5] = bg_ui.crate;
+    b[6] = bg_ui.fill, b[7] = bg_ui.accent, b[8] = bg_ui.human;
+    b[9] = (uint8_t)bg_ui.seed, b[10] = (uint8_t)(bg_ui.seed >> 8);
+    b[11] = bg_kset;
+}
+static int bg_restore(const uint8_t *b)
+{
+    if (b[0] != 1u || b[1] >= BG_NSTYLE || (b[2] != 1u && b[2] != 2u && b[2] != 4u) || b[3] >= BG_NKICK ||
+        b[4] >= BG_NCYM || b[5] >= BG_NCRATE || b[6] >= BG_NFILL || b[7] > 1u || b[8] > BG_HUMAN_MAX || b[11] > 1u)
+        return 0;                                        /* (not ours, or damaged: the defaults stay) */
+    bg_ui.style = b[1], bg_ui.bars = b[2], bg_ui.kick = b[3], bg_ui.cym = b[4], bg_ui.crate = b[5];
+    bg_ui.fill = b[6], bg_ui.accent = b[7], bg_ui.human = b[8];
+    bg_ui.seed = (uint16_t)(b[9] | b[10] << 8);
+    bg_kset = b[11];
+    return 1;
+}
 UI_SMALL static void bg_write(void)                      /* OCT+ on the GEN page */
 {
     if (ft_on || (song.playing && song.rec)) {
@@ -315,6 +336,8 @@ UI_SMALL static void bg_write(void)                      /* OCT+ on the GEN page
     }
     beatgen_apply(&bg_ui);
     bg_ui.seed++;                                        /* (the next write: another take; the preview follows) */
+    fav_dirty = 1;                                       /* (the settings' side record: GEN kept with the next settings
+                                                          * write, when the panel is quiet; not on every knob turn) */
     ui_say("WRITTEN: ", BG_STYLE_NAME[bg_ui.style % BG_NSTYLE]);
 }
 #endif

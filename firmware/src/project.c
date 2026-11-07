@@ -764,7 +764,9 @@ typedef struct {
     uint32_t lights;                               /* SLOOP 2.3: the backlight (panel.c lights_word); appended,
                                                     * so 2.2 still reads its part (st_load cuts at its size) */
 } persist_t;
-_Static_assert(sizeof(side_rec_t) == 80u && sizeof(side_rec_t) <= ST_SIDE_MAX, "the side record: theme, favourites");
+_Static_assert(sizeof(side_rec_t) == 100u && sizeof(side_rec_t) <= ST_SIDE_MAX, "the side record: theme, favourites, "
+               "(Rheia) GEN after SLOOP's 80 bytes");
+_Static_assert(__builtin_offsetof(side_rec_t, gmagic) == 80u, "(Rheia) SLOOP's part of the side record unchanged");
 static side_rec_t side_out;
 #define PERSIST_SIZE_V22 __builtin_offsetof(persist_t, lights)   /* the settings as 2.2 wrote them (no lights) */
 _Static_assert(sizeof(persist_t) == PERSIST_SIZE_V22 + 4u, "lights: the last word, no padding before it");
