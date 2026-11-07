@@ -51,6 +51,9 @@ run "Rheia WALL: BUZZ SLAB SHRED bounded, level-matched, their character, the ga
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o "$OUT/section_tempo_test" tests/section_tempo_test.c -lm
 run "Rheia section tempo: x1/2 x1 x2 in song mode and live, bars at each tempo, the base back at STOP" "$OUT/section_tempo_test"
 
+$CC -O2 -w -Ibuild/gen -Ifirmware/src -Ifirmware/hal -o "$OUT/feedback_test" tests/feedback_test.c -lm
+run "Rheia NOISE FDBK: a howl at FREQ, steady and bounded, ringing at FDBK 0, keys, release, BITE" "$OUT/feedback_test"
+
 $CC -o "$OUT/arranger_test" tests/arranger_test.c
 run "song order, timing, repeats and missing scenes" "$OUT/arranger_test"
 $CC -O2 -w -Ibuild/gen -Ifirmware/src -o "$OUT/song_audio_test" tests/song_audio_test.c -lm

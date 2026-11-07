@@ -12,18 +12,24 @@
  * TRK key-tracks FREQ (127 = one semitone a semitone, around C4). DRFT: a slow random wander of FREQ
  * (and the clock), the level following it. CRSH (ANLG, DUST): sample-and-hold and fewer bits.
  * The track's FLT moves FREQ, SHP moves COLR, PIT the key (so FREQ with TRK, and the clock).
+ * (Rheia) FDBK: feedback, as a guitar amp's. The source (ANLG's noise, quiet) excites the band-pass, and the band-pass
+ * goes back into its own input through a soft clip: DENS is FDBK, the loop gain (0.6 at 0: ringing noise; over 1 from
+ * about 70: it breaks into a howl at FREQ, held by the clip), CRSH is BITE (the clip driven harder: a harsher howl).
+ * DRFT makes the howl wander, TRK plays it from the keys, a slow ATK lets it swell. The level is the howl's own.
  *
  * State: s[0] s[1] the filter, s[2] the random generator (seeded by the note and the unison detune: a
  * note from silence sounds the same each time), s[3] the drift target and its countdown, s[4..6] the pink
  * poles, s[7] the brown pole; ph[0] the clock phase (LFSR, META) or the hold count (CRSH), ph[1] the
  * register, the held sample or META's DC blocker, ph[2] the drift. */
-static const char *const N_NOISE_MODE[] = {"ANLG", "DUST", "LFSR", "META"};
-enum { NZ_ANLG, NZ_DUST, NZ_LFSR, NZ_META };
+static const char *const N_NOISE_MODE[] = {"ANLG", "DUST", "LFSR", "META", "FDBK"};   /* (Rheia: FDBK appended) */
+enum { NZ_ANLG, NZ_DUST, NZ_LFSR, NZ_META, NZ_FDBK, NZ_NMODE };
 static const char *const N_NOISE_LONG[] = {"L23", "L20", "L17", "L15", "L13", "L11", "L9", "L7", 0};
 static const char *const N_NOISE_META[] = {"127", "127B", "93", "63", "63B", "31", "15", "7", 0};
 static const param_desc_t NOISE_LONG = {"LEN", F_INT, 0, 127, 0, N_NOISE_LONG, 0};   /* = edit[5] but the names */
 static const param_desc_t NOISE_META = {"LEN", F_INT, 0, 127, 0, N_NOISE_META, 0};
 static const param_desc_t NOISE_CLK = {"CLK", F_INT, 0, 127, 0, 0, "st"};           /* = edit[7]: above the key */
+static const param_desc_t NOISE_FDBK = {"FDBK", F_PCT, 0, 127, 0, 0, 0};             /* (Rheia) FDBK: = edit[5] */
+static const param_desc_t NOISE_BITE = {"BITE", F_PCT, 0, 127, 0, 0, 0};             /* (Rheia) FDBK: = edit[7] */
 
 /* Galois taps of the long registers (maximal length: 2^n - 1 clocks) */
 static const uint32_t NOISE_TAPS[8] = {0x420000u, 0x90000u, 1u << 16 | 1u << 13, 0x6000u, 0x100Du, 0x500u, 0x110u, 0x60u};
@@ -45,6 +51,8 @@ static const struct { uint32_t w[4]; uint8_t len; int16_t hi, lo; } NOISE_SEQ[8]
 static const param_desc_t *noise_desc(const track_t *t, uint32_t k)
 {
     int32_t mode = t->p[P_E0];
+    if (mode == NZ_FDBK)                              /* (Rheia) */
+        return k == 5u ? &NOISE_FDBK : k == 7u ? &NOISE_BITE : 0;
     if (k == 5u && mode >= NZ_LFSR)
         return mode == NZ_LFSR ? &NOISE_LONG : &NOISE_META;
     if (k == 7u && mode >= NZ_LFSR)
@@ -111,8 +119,10 @@ static void noise_note_on(track_t *t, voice_t *v)
 static void noise_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const vmod_t *m)
 {
     const int16_t *p = t->p;
-    uint32_t mode = (uint32_t)p[P_E0] & 3u, sel = ((uint32_t)p[P_E5] >> 4) & 7u, i;
+    uint32_t mode = (uint32_t)clamp(p[P_E0], 0, NZ_NMODE - 1), sel = ((uint32_t)p[P_E5] >> 4) & 7u, i;
     int32_t res = p[P_E3], drft = p[P_E6], crsh = mode < NZ_LFSR ? p[P_E7] : 0;
+    int32_t fbg = mode == NZ_FDBK ? 2458 + p[P_E5] * 24 : 0;   /* (Rheia) FDBK: the loop gain, Q12: 0.6 .. 1.34 */
+    int32_t bite = mode == NZ_FDBK ? 256 + p[P_E7] * 12 : 256;  /* (Rheia) FDBK: the clip's drive, Q8: 1x .. 7x */
     int32_t ic1 = v->s[0], ic2 = v->s[1], rng = v->s[2], b0 = v->s[4], b1 = v->s[5], b2 = v->s[6], br = v->s[7];
     uint32_t ph = v->ph[0], reg = v->ph[1];         /* state in locals: out[] may alias v->s[] */
     int32_t drift = (int32_t)v->ph[2], d16 = 0, gain = 32767, gq, colr, cut, k, a1, a2, a3, g, bpg, mix, cf, thr = 0;
@@ -156,6 +166,8 @@ static void noise_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         gq = (gq * (gain >> 3)) >> 12;
         if (gq > 65535)
             gq = 65535;
+        if (mode == NZ_FDBK)                          /* (Rheia) the howl's level is its own (the clip's), the drift's on it */
+            gq = gain >> 3;
     }
     if (mode <= NZ_DUST && p[P_E5]) {                 /* impulses: 1 .. 2000 a second */
         uint32_t e = (uint32_t)p[P_E5] * 22u, r = 1u << (e >> 8);   /* 2^(DENS * 11 / 127), Q8 fraction */
@@ -177,8 +189,17 @@ static void noise_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         inc = p[P_E7] || d16 ? noise_inc(m->pitch16 + p[P_E7] * 16 + d16) : m->inc;
     }
     for (i = 0; i < n; i++) {
-        int32_t w, x, v1, v2, v3, y;
+        int32_t w, x, v1, v2, v3, y, amp = 0;          /* amp: (Rheia) FDBK, the clipped loop: what the amp plays */
         switch (mode) {
+        case NZ_FDBK: {                               /* (Rheia) quiet noise to start it, the band-pass fed back */
+            uint32_t r = noise32(&rng);
+            int32_t fb = (int32_t)reg;                /* (the last band-pass output, unity at its peak) */
+            fb = soft_knee(clamp((fb * bite) >> 8, -400000, 400000), 16000);   /* (|fb| <= 60000, bite < 1800: 32 bits) */
+            amp = fb;
+            w = ((int32_t)(r >> 17) - 16384) >> 4;
+            w += (fb * fbg) >> 12;
+            break;
+        }
         case NZ_DUST:
         case NZ_ANLG: {
             uint32_t r = noise32(&rng);
@@ -226,8 +247,15 @@ static void noise_render(track_t *t, voice_t *v, int32_t *out, uint32_t n, const
         v2 = ic2 + ((a2 * ic1 + a3 * v3 + 4096) >> 13);
         ic1 = clamp(2 * v1 - ic1, -150000, 150000);
         ic2 = clamp(2 * v2 - ic2, -150000, 150000);
-        v1 = (v1 * bpg * 3) >> 13;
-        y = v2 + (((v1 - v2) * (mix >> 3)) >> 12);
+        if (mode == NZ_FDBK) {                        /* (Rheia) the band-pass, unity at its peak (x damping), goes round;
+                                                       * what is heard is the clipped loop, BITE's harmonics in it */
+            int32_t bp = (v1 * k) >> 12;              /* (|v1| <= 150000, k <= 8192: 32 bits) */
+            reg = (uint32_t)clamp(bp, -60000, 60000);
+            y = amp;
+        } else {
+            v1 = (v1 * bpg * 3) >> 13;
+            y = v2 + (((v1 - v2) * (mix >> 3)) >> 12);
+        }
         y = soft_knee(((y >> 4) * gq) >> 8, 24000);
         if (mode == NZ_META) {                        /* the knee bends a lopsided tone: a DC blocker, ~14 Hz */
             reg += (uint32_t)(((y << 8) - (int32_t)reg) >> 9);
@@ -270,6 +298,10 @@ static const preset_t NOISE_PRESETS[] = {
     {"NZ SNARE", {NZ_ANLG, 20, 90, 30, 64, 0, 0, 0}, {0, 60, 0, 44}, 0, 0, FX(0, 0, 0, 25)},
     {"BITCRUSH", {NZ_ANLG, 40, 90, 40, 64, 0, 0, 100}, {0, 70, 110, 40}, 0, 0, FX(0, 0, 20, 30)},
     {"RADIO", {NZ_LFSR, 20, 70, 90, 64, 0, 60, 48}, {10, 70, 120, 50}, 0, 0, FX(0, 10, 30, 40)},
+    /* (Rheia) FDBK: a guitar amp's feedback. FEEDBACK swells slowly and wanders (DRFT), for intros and noise breaks;
+     * HOWL follows the keys (TRK 127) with more bite, a howl to play */
+    {"FEEDBACK", {NZ_FDBK, 30, 74, 110, 40, 110, 60, 50}, {90, 90, 127, 80}, 0, 0, FX(0, 0, 30, 70)},
+    {"HOWL", {NZ_FDBK, 30, 60, 115, 127, 100, 0, 70}, {30, 80, 127, 50}, 0, 1, FX(0, 0, 20, 40)},
 };
 
 /* (after Clipper 1.2) UNISON (voice.c unison_spread): the phase moved by r (Q32) and the noise from its own
@@ -287,7 +319,7 @@ static const engine_t ENG_NOISE = {
     .name = "NOISE",
     .page_title = {"SRC", "MOVE"},
     .edit = {
-        {"MODE", F_ENUM, 0, 3, 0, N_NOISE_MODE, 0},
+        {"MODE", F_ENUM, 0, NZ_NMODE - 1, 0, N_NOISE_MODE, 0},
         {"COLR", F_PCT, 0, 127, 64, 0, 0},
         {"FREQ", F_CUTOFF, 0, 127, 80, 0, 0},
         {"RES", F_PCT, 0, 127, 30, 0, 0},
