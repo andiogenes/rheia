@@ -701,7 +701,9 @@ async function editorV5() {
   const dk = (/DRUM_KIT_NAMES\[\] = \{([^}]*)\}/.exec(dc) || [])[1] || "";
   const gen = join(HERE, "../build/gen/felucca_drumkits.h");
   const dsList = existsSync(gen) ? ((/#define DS_KIT_NAME_LIST (.*)/.exec(readFileSync(gen, "utf8")) || [])[1] || "") : null;
-  const fwKits = dsList == null ? null : dk.replace("DS_KIT_NAME_LIST", dsList).split(",").map((x) => x.trim().replace(/"/g, ""));
+  const rhList = existsSync(gen) ? ((/#define DS_RH_KIT_NAME_LIST (.*)/.exec(readFileSync(gen, "utf8")) || [])[1] || "") : null;   /* (Rheia) */
+  const fwKits = dsList == null ? null : dk.replace("DS_KIT_NAME_LIST", dsList).replace("DS_RH_KIT_NAME_LIST", rhList)
+    .split(",").map((x) => x.trim().replace(/"/g, ""));
   ok(kit.label === "KIT" && kit.names[5] === "808" && kit.names.length === kit.max + 1 && (!fwKits || fwKits.join() === kit.names.join()),
     `v5: the drum track's KIT (${kit.names.length} kits${fwKits ? ", == drums.c" : ""})`);
   /* TRACK ends with the solo mask */
@@ -1047,7 +1049,8 @@ async function editorDsyn() {
   let hdr = null;
   try { hdr = readFileSync(join(HERE, "../build/gen/felucca_drumkits.h"), "utf8"); } catch (e) { /* (not built) */ }
   if (hdr) {
-    const kits = [...hdr.matchAll(/\{"([^"]*)", "[^"]*", (0x[0-9A-Fa-f]+|\d+), \{([\s\S]*?)\}\},/g)];
+    const kits = [...hdr.matchAll(/\{"([^"]*)", "[^"]*", (0x[0-9A-Fa-f]+|\d+), \{([\s\S]*?)\}\},/g)].slice(0, 32);   /* (Rheia: its
+                                                    kits come after SLOOP's 32; the simulated FM-1 offers SLOOP's) */
     const bytes = kits.flatMap((k) => [Number(k[2]), ...[...k[3].matchAll(/\{([^{}]*)\},/g)].flatMap((r) => r[1].split(",").map((x) => +x & 255))]);
     ok(kits.length === 32 && js(kits.map((k) => k[1])) === js(E.DSYN_MOCK_NAMES) && js(Array.from(raw)) === js(bytes),
       "dsyn: the mock's 32 kits == build/gen/felucca_drumkits.h");

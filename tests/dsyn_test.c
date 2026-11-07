@@ -126,9 +126,10 @@ int main(void)
     host_tracks_init();
     song.g[G_DRREV] = 0;
     song.g[G_BPM] = 120;
-    check(DRUM_SYN == DRUM_PAIR + 1u && DRUM_KITS == DRUM_SYN + 4u && !strcmp(DRUM_KIT_NAMES[DRUM_SYN], "SYN1") &&
-          !strcmp(DRUM_KIT_NAMES[DRUM_KITS - 1u], "SYN4") && !strcmp(DRUM_KIT_STYLES[DRUM_SYN], "YOUR SYNTH"),
-          "the kit list ends with SYN1..SYN4, after USR3+4 (older projects keep their kit)");
+    check(DRUM_SYN == DRUM_PAIR + 1u && DRUM_RH == DRUM_SYN + 4u && !strcmp(DRUM_KIT_NAMES[DRUM_SYN], "SYN1") &&
+          !strcmp(DRUM_KIT_NAMES[DRUM_RH - 1u], "SYN4") && !strcmp(DRUM_KIT_STYLES[DRUM_SYN], "YOUR SYNTH") &&
+          DRUM_KITS == DRUM_RH + DS_NKITS_RHEIA && !strcmp(DRUM_KIT_NAMES[DRUM_RH], "BLAST") && DRUM_USR == 37u,
+          "SYN1..SYN4 after USR3+4 at the numbers SLOOP gave them (older projects keep their kit); Rheia's kits after");
     (void)dsu_kit(0);
     ok = 1;
     for (k = 0; k < DSU_N; k++)

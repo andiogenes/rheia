@@ -22,16 +22,28 @@
  * a user sample slot as a kit (the web editor's DRUM KIT: a sound per lane, zone lo..hi = the lane's note),
  * and USR3+4: one kit over the slots USR3 and USR4 (a lane's sound in either) */
 #define DRUM_SAMPLED 5u
-#define DRUM_USR (DRUM_SAMPLED + DS_NKITS)
+#define DRUM_USR (DRUM_SAMPLED + DS_NKITS_SLOOP)   /* (Rheia: SLOOP's kits only; its own come after SYN4) */
 #define DRUM_PAIR (DRUM_USR + SMP_USER_SLOTS)   /* USR3+4: one kit in two slots (the editor splits it), ~15 s */
 #define DRUM_SYN (DRUM_PAIR + 1u)                /* SLOOP 2.5: SYN1..SYN4, your synthesised kits (drum_synth.c dsu) */
-#define DRUM_KITS (DRUM_SYN + DSU_N)
+#define DRUM_RH (DRUM_SYN + DSU_N)               /* (Rheia) its synthesised kits (DS_KITS after SLOOP's): after SYN4, so
+                                                 * every number a project stored keeps its kit */
+#define DRUM_KITS (DRUM_RH + DS_NKITS_RHEIA)
 static const char *const DRUM_KIT_NAMES[] = {"ACOUSTIC", "DEEP", "TIGHT", "BRIGHT", "DUST", DS_KIT_NAME_LIST,
                                              "USR1", "USR2", "USR3", "USR4", "USR3+4",
-                                             "SYN1", "SYN2", "SYN3", "SYN4"};
+                                             "SYN1", "SYN2", "SYN3", "SYN4", DS_RH_KIT_NAME_LIST};
 static const char *const DRUM_KIT_STYLES[] = {"STUDIO", "SOFT", "PUNCHY", "BRIGHT", "DUSTY", DS_KIT_STYLE_LIST,
                                               "YOUR KIT", "YOUR KIT", "YOUR KIT", "YOUR KIT", "BIG KIT",
-                                              "YOUR SYNTH", "YOUR SYNTH", "YOUR SYNTH", "YOUR SYNTH"};
+                                              "YOUR SYNTH", "YOUR SYNTH", "YOUR SYNTH", "YOUR SYNTH", DS_RH_KIT_STYLE_LIST};
+/* a synthesised kit's place in DS_KITS (SLOOP's from DRUM_SAMPLED, Rheia's from DRUM_RH), DS_NKITS: not one */
+static uint32_t ds_index(uint32_t kit)
+{
+    return kit >= DRUM_RH && kit < DRUM_KITS ? DS_NKITS_SLOOP + (kit - DRUM_RH)
+         : kit >= DRUM_SAMPLED && kit < DRUM_USR ? kit - DRUM_SAMPLED : DS_NKITS;
+}
+static uint32_t ds_kit_of(uint32_t k)            /* the KIT number of DS_KITS[k] (k < DS_NKITS) */
+{
+    return k < DS_NKITS_SLOOP ? DRUM_SAMPLED + k : DRUM_RH + (k - DS_NKITS_SLOOP);
+}
 _Static_assert(sizeof(DRUM_KIT_NAMES) / sizeof(DRUM_KIT_NAMES[0]) == DRUM_KITS, "a name per kit");
 static uint32_t drum_kit(void) { return (uint32_t)clamp(TDRUM->p[P_E0], 0, DRUM_KITS - 1); }
 #define DRUM_DEFAULT_KIT DRUM_SAMPLED   /* power-on: 808 */
@@ -297,6 +309,11 @@ static void drum_on(uint32_t note, uint32_t vel)
         drums.hits |= (uint16_t)(1u << lane_of_note(note));
     if (note == 35u || note == 36u)
         drums.kick = 1;                             /* (DUCK) */
+    if (kit >= DRUM_RH) {                           /* (Rheia) its synthesised kits */
+        const dkit_t *k = &DS_KITS[ds_index(kit) % DS_NKITS];
+        drum_synth_on(note, vel, kit, k->s, k->crush, 1);
+        return;
+    }
     if (kit >= DRUM_SYN) {                          /* SYN1..SYN4: your synthesised kit */
         const dsu_kit_t *u = dsu_kit(kit - DRUM_SYN);
         drum_synth_on(note, vel, kit, u->s, u->crush, 1);

@@ -16,8 +16,8 @@ int main(int argc, char **argv)
         return 1;
     host_tracks_init();
     song.g[G_DRLVL] = 100;
-    for (kit = DRUM_SAMPLED; kit < DRUM_USR; kit++)
-        for (ln = 0; ln < 16u; ln++) {
+    for (uint32_t dk = 0; dk < DS_NKITS; dk++)       /* (Rheia: DS_KITS order, SLOOP's kits then its own after SYN4) */
+        for (ln = 0, kit = ds_kit_of(dk); ln < 16u; ln++) {
             memset(&drums, 0, sizeof drums);
             drums.set = -2;
             TDRUM->p[P_E0] = (int16_t)kit;
@@ -32,6 +32,6 @@ int main(int argc, char **argv)
             }
         }
     fclose(f);
-    printf("%u kits x 16 sounds -> %s\n", DRUM_USR - DRUM_SAMPLED, argv[1]);
+    printf("%u kits x 16 sounds -> %s\n", (unsigned)DS_NKITS, argv[1]);
     return 0;
 }
