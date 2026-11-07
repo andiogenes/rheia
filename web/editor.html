@@ -1234,9 +1234,9 @@ const LIVE = { STATE: 0, PLAY: 1, KEY: 2, FX: 3, REC: 4, UNDO: 5, LY_KEY: 5, LY_
      the master level, a drum sound's TUNE / DECAY; a state with them is 50 bytes (s.pro) */
   ROLL: 6, ERASE: 7, PATTERN: 8, CHAIN: 9, THROW: 10, MASTER: 11, DRUM_TW: 12, CHAIN_MAX: 8,
   /* the 27 punch-in effects (punch.c PUNCH_NAME): 16 on the white keys, 11 on the black keys */
-  FX_NAMES: ["LOOP 4", "LOOP 8", "LOOP 16", "LOOP 32", "STUTTER", "REVERSE", "STOP", "HALF", "LOW", "HIGH", "PHONE", "CRUSH",
-    "ALIAS", "GATE", "ECHO", "WOBBLE", "KILL LOW", "KILL MID", "KILL HIGH", "REWIND", "OCT UP", "FLANGER", "AUTO-PAN", "FREEZE",
-    "LOOP 8T", "MONO", "FADE OUT"],
+  FX_NAMES: ["LOOP 4", "LOOP 8", "LOOP 16", "LOOP 32", "STUTTER", "REVERSE", "STOP", "HALF", "LOW", "HIGH", "WALL-UP", "CRUSH",
+    "COLLAPSE", "GATE", "ECHO", "WOBBLE", "KILL LOW", "KILL MID", "KILL HIGH", "REWIND", "OCT UP", "FLANGER", "BLAST-IN", "FREEZE",
+    "LOOP 8T", "VOID", "FADE OUT"],   /* (Rheia: WALL-UP, COLLAPSE, BLAST-IN, VOID at PHONE, ALIAS, AUTO-PAN, MONO's keys) */
   /* the GLO keys (ui_layers.c layer_key): 1..4 mute, 5..8 solo, 9 fill while held, 10 fill next bar, 16 tap tempo;
      the SAVE keys: 1..4 play A..D, 5..8 store into A..D, 13 loop / song, 14 SONG REC */
   MUTE: 0, SOLO: 4, FILL: 8, FILL_BAR: 9, TAP: 15, SEC: 0, STORE: 4, SONG: 12, SONG_REC: 13 };

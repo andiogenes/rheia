@@ -10,14 +10,16 @@
 /* the transport clock (core.h clk_pos) places the loops and the gate on the grid */
 static uint32_t clk_samples(void) { return clk_pos / (uint32_t)song.g[G_BPM]; }   /* samples into the beat */
 #define PUNCH_NFX 27u                     /* 16 on the white keys, 11 on the black keys (2.6) */
+/* (Rheia) four of SLOOP's, at their keys, are heavy music's: PHONE -> WALL-UP, ALIAS -> COLLAPSE, AUTO-PAN -> BLAST-IN,
+ * MONO -> VOID (CRUSH is still the lo-fi one) */
 enum { PX_LOOP4, PX_LOOP8, PX_LOOP16, PX_LOOP32, PX_STUT, PX_REV, PX_STOP, PX_HALF,
-       PX_LPF, PX_HPF, PX_TEL, PX_CRUSH, PX_DOWN, PX_GATE, PX_ECHO, PX_WOBBLE,
+       PX_LPF, PX_HPF, PX_WALLUP, PX_CRUSH, PX_COLLAPSE, PX_GATE, PX_ECHO, PX_WOBBLE,
        /* the black keys, F#3 .. F#5 */
-       PX_KLOW, PX_KMID, PX_KHIGH, PX_RWD, PX_OCT, PX_FLANGE, PX_PAN, PX_FREEZE, PX_LOOP8T, PX_MONO, PX_FADE };
+       PX_KLOW, PX_KMID, PX_KHIGH, PX_RWD, PX_OCT, PX_FLANGE, PX_BLASTIN, PX_FREEZE, PX_LOOP8T, PX_VOID, PX_FADE };
 static const char *const PUNCH_NAME[PUNCH_NFX] = {
     "LOOP 4", "LOOP 8", "LOOP 16", "LOOP 32", "STUTTER", "REVERSE", "STOP", "HALF",
-    "LOW", "HIGH", "PHONE", "CRUSH", "ALIAS", "GATE", "ECHO", "WOBBLE",
-    "KILL LOW", "KILL MID", "KILL HIGH", "REWIND", "OCT UP", "FLANGER", "AUTO-PAN", "FREEZE", "LOOP 8T", "MONO",
+    "LOW", "HIGH", "WALL-UP", "CRUSH", "COLLAPSE", "GATE", "ECHO", "WOBBLE",
+    "KILL LOW", "KILL MID", "KILL HIGH", "REWIND", "OCT UP", "FLANGER", "BLAST-IN", "FREEZE", "LOOP 8T", "VOID",
     "FADE OUT"};
 #define PX_OCT_W 2048u                    /* OCT UP: the window of its two read taps (46 ms) */
 #define PX_FRZ_CAP 8192u                  /* FREEZE: samples of the mix poured into the held reverb (186 ms) */
@@ -50,7 +52,8 @@ static struct {
 } punch = {.req = -1, .cur = -1, .fg = 8192};
 
 static int px_loop(int32_t fx) { return fx <= PX_STUT || fx == PX_LOOP8T; }   /* on the grid */
-static int px_replay(int32_t fx) { return fx <= PX_HALF || fx == PX_LOOP8T; } /* replays a span of the ring */
+static int px_replay(int32_t fx) { return fx <= PX_HALF || fx == PX_LOOP8T || fx == PX_COLLAPSE || fx == PX_BLASTIN; }
+                                                    /* replays a span of the ring (Rheia: COLLAPSE, BLAST-IN too) */
 
 static uint32_t beat_samples(void) { return (uint32_t)FS * 60u / (uint32_t)song.g[G_BPM]; }
 
@@ -97,8 +100,16 @@ static void punch_start(int32_t fx)
     memset(punch.z, 0, sizeof punch.z);
     punch.v = 65536;
     punch.fv = 32767u << 8;
-    if (fx == PX_PAN && song.playing)                   /* AUTO-PAN: a turn a beat, on the grid */
-        punch.lfo = ph * (0xFFFFFFFFu / beat);
+    if (fx == PX_COLLAPSE || fx == PX_BLASTIN) {        /* (Rheia) the last beat / eighth, already in the ring */
+        if (fx == PX_BLASTIN)
+            punch.len = len = len / 2u < 64u ? 64u : len / 2u;
+        punch.start = punch.w - len;
+        punch.rp = 0;
+        punch.spd = 65536u;
+        punch.dspd = 32768u / len + 1u;                 /* COLLAPSE: to half speed in a beat */
+        punch.k = 0;
+        punch.t = 0;
+    }
     if (fx == PX_FLANGE)                                /* FLANGER: the sweep starts at its shortest delay */
         punch.lfo = 0xC0000000u;
 }
@@ -221,6 +232,11 @@ static void punch_freeze_feed(int32_t *rev, const int32_t *l, const int32_t *r, 
         punch.fg = 8192;                                /* x 8: the old x 4 on the full lines */
     }
     rev_frz = (uint8_t)frz;
+    if (punch.cur == PX_VOID) {                         /* (Rheia) VOID: nothing more into the reverb, its tail rings out */
+        for (i = 0; i < n; i++)
+            rev[i] = 0;
+        return;
+    }
     if (!rev_frz)
         return;
     for (i = 0; i < n; i++)
@@ -228,6 +244,7 @@ static void punch_freeze_feed(int32_t *rev, const int32_t *l, const int32_t *r, 
                                                          * mulq15(rev_in, 13000): no overflow) */
 }
 
+static uint32_t bl_len, bl_dec;                     /* (Rheia) BLAST-IN, per block: the repeat's length, its decay */
 /* l, r: the mix before the master (fx.c mix_block), n samples, in place */
 static void punch_process(int32_t *l, int32_t *r, uint32_t n)
 {
@@ -271,6 +288,14 @@ static void punch_process(int32_t *l, int32_t *r, uint32_t n)
     fdec = (32767u << 8) / (2u * beat);                 /* FADE OUT: to nothing in two beats */
     if (punch.cur == PX_GATE)
         punch.gp = (song.playing ? clk_samples() : punch.t) % step;
+    {   /* (Rheia) BLAST-IN: this block's repeat length (an eighth, a sixteenth after a beat, a 32nd after two) and its
+         * decay a sample (40 % over a repeat), Q16: no divide per sample */
+        uint32_t s = punch.t < beat ? 0u : punch.t < 2u * beat ? 1u : 2u;
+        bl_len = punch.len >> s;
+        if (bl_len < 64u)
+            bl_len = 64u;
+        bl_dec = (13107u << 16) / bl_len;
+    }
     {   /* filter sweeps: per block */
         int32_t fx = punch.cur;
         if (fx == PX_LPF && punch.g > 0)
@@ -289,7 +314,7 @@ static void punch_process(int32_t *l, int32_t *r, uint32_t n)
             }
         } else {
             tsvf_coef(&c1, fx == PX_LPF ? punch.cut : fx == PX_HPF ? (127 << 8) - punch.cut + (40 << 8) : 96 << 8, 90);
-            tsvf_coef(&c2, 58 << 8, 40);              /* PHONE: low cut ~ 500 Hz */
+            tsvf_coef(&c2, 58 << 8, 40);              /* (PHONE's low cut, SLOOP; unused since Rheia's WALL-UP) */
         }
     }
     {   /* (2.7.2) GLO > MASTER 2 > FADE: the wet gain's ramp when an effect is engaged / released. 512 (0, ~1.5 ms, as
@@ -314,25 +339,28 @@ static void punch_process(int32_t *l, int32_t *r, uint32_t n)
             wl = x - (tsvf_lp(&c1, x >> 1, &punch.f1l, &punch.f2l) << 1);
             wr = y - (tsvf_lp(&c1, y >> 1, &punch.f1r, &punch.f2r) << 1);
             break;
-        case PX_TEL: {
-            int32_t b = tsvf_lp(&c1, m >> 1, &punch.f1l, &punch.f2l);        /* < 2.5 kHz */
-            b -= tsvf_lp(&c2, b, &punch.f3l, &punch.f4l);                   /* > 500 Hz */
-            wl = wr = softclip(b << 2) >> 1;
+        case PX_WALLUP:                                 /* (Rheia) the whole mix through a wall: x5 into a soft clip, then
+                                                         * a hard one (its level near the mix's peak) */
+            wl = clamp((softclip(clamp((x >> 2) * 5, -65535, 65535)) * 3) >> 1, -26000, 26000) << 2;
+            wr = clamp((softclip(clamp((y >> 2) * 5, -65535, 65535)) * 3) >> 1, -26000, 26000) << 2;
             break;
-        }
         case PX_CRUSH:
             wl = x >= 0 ? x & ~0x7FF : -((-x) & ~0x7FF);   /* towards zero: no offset */
             wr = y >= 0 ? y & ~0x7FF : -((-y) & ~0x7FF);
             break;
-        case PX_DOWN:
-            if (--punch.hn <= 0) {
-                punch.hn = 8;
-                punch.held_l = x;
-                punch.held_r = y;
-            }
-            wl = punch.held_l;
-            wr = punch.held_r;
+        case PX_COLLAPSE: {                             /* (Rheia) the last beat looped, its speed (and pitch) falling to
+                                                         * half in a beat and staying there: the riff sinks into sludge */
+            uint32_t L = punch.len << 16, p = punch.rp, k = p >> 16;
+            int32_t v = ring_q16((punch.start << 16) + p);
+            punch.rp = p + punch.spd >= L ? p + punch.spd - L : p + punch.spd;
+            punch.spd = punch.spd > 32768u + punch.dspd ? punch.spd - punch.dspd : 32768u;
+            if (k < 64u)
+                v = (v * (int32_t)k) >> 6;             /* (declick at the seam) */
+            else if (punch.len - k < 64u)
+                v = (v * (int32_t)(punch.len - k)) >> 6;
+            wl = wr = v;
             break;
+        }
         case PX_GATE: {
             uint32_t p = punch.gp;
             int32_t gg = p < step / 2u ? 32767 : 0;
@@ -382,12 +410,17 @@ static void punch_process(int32_t *l, int32_t *r, uint32_t n)
             wr = ((y + (er << 3)) * 5) >> 3;
             break;
         }
-        case PX_PAN: {                                  /* the mix in mono, left to right and back once a beat */
-            uint32_t a = (uint32_t)(((sine_i(punch.lfo) * 28000) >> 15) + 32768) << 14;   /* 0..a quarter turn */
-            int32_t gl = (sine_i(a + 0x40000000u) * 46341) >> 15, gr = (sine_i(a) * 46341) >> 15;   /* x sqrt 2 */
-            punch.lfo += binc;
-            wl = ((m >> 4) * gl) >> 11;                 /* (>> 4: no overflow on a hot mix, gl up to 46341) */
-            wr = ((m >> 4) * gr) >> 11;
+        case PX_BLASTIN: {                              /* (Rheia) the last eighth repeated, faster and faster: eighths for a
+                                                         * beat, sixteenths for a beat, then 32nds; each repeat a hit
+                                                         * (loud at its start, down to 60 %): a roll into the blast */
+            uint32_t L = bl_len, k = punch.k >= L ? 0u : punch.k;
+            int32_t v = (ring_at(punch.start + k) >> 3) * (32767 - (int32_t)((k * bl_dec) >> 16)) >> 12;
+            if (k < 64u)
+                v = (v * (int32_t)k) >> 6;
+            else if (L - k < 64u)
+                v = (v * (int32_t)(L - k)) >> 6;
+            punch.k = k + 1u;
+            wl = wr = v;
             break;
         }
         case PX_FREEZE: {                               /* the held reverb (rev_l / rev_r), the dry mix fading under it */
@@ -397,8 +430,10 @@ static void punch_process(int32_t *l, int32_t *r, uint32_t n)
             wr = y + ((((fr - y) >> 3) * (c >> 3)) >> 9);
             break;
         }
-        case PX_MONO:
-            wl = wr = m;
+        case PX_VOID:                                   /* (Rheia) everything gone but the reverb's tail, nothing new fed
+                                                         * into it (punch_freeze_feed): it rings out into silence */
+            wl = rev_l[i & (CTL - 1u)];
+            wr = rev_r[i & (CTL - 1u)];
             break;
         case PX_FADE: {
             int32_t v = (int32_t)(punch.fv >> 8), gq = (v * v) >> 15;   /* squared: the ear hears it even */

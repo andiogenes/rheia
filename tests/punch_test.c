@@ -72,6 +72,7 @@ static int32_t g_burst(uint32_t t, int ch)            /* a chord for 0.5 s, then
     x += sin(2 * M_PI * 220 * t / FS) + sin(2 * M_PI * 277.2 * t / FS + ch) + sin(2 * M_PI * 329.6 * t / FS) + 0.5 * sin(2 * M_PI * 880 * t / FS);
     return (int32_t)(10000.0 * x);
 }
+static int run_send;                                  /* (Rheia) a reverb send of the mix (VOID's tail needs one) */
 /* fx held from sample `on` to `off`, through the buses as mix_block runs them (FREEZE needs the reverb) */
 static void run_fx(int32_t fx, gen_f g, uint32_t ns, uint32_t on, uint32_t off, int playing)
 {
@@ -84,6 +85,8 @@ static void run_fx(int32_t fx, gen_f g, uint32_t ns, uint32_t on, uint32_t off, 
         int32_t l[CTL], r[CTL], sc[CTL] = {0}, sd[CTL] = {0}, sr[CTL] = {0}, wl[CTL], wr[CTL];
         uint32_t t0 = b * CTL;
         for (i = 0; i < CTL; i++) l[i] = g(t0 + i, 0), r[i] = g(t0 + i, 1);
+        if (run_send)
+            for (i = 0; i < CTL; i++) sr[i] = (l[i] + r[i]) >> 2;
         punch.req = (int8_t)(t0 >= on && t0 < off ? fx : -1);
         punch_freeze_feed(sr, l, r, CTL);
         fx_buses(sc, sd, sr, wl, wr, CTL);
@@ -135,22 +138,46 @@ static void punch_new_fx(void)
     a = tone_pow(ol, FS * 3u / 5u, FS * 7u / 5u, 440), b2 = tone_pow(ol, FS * 3u / 5u, FS * 7u / 5u, 220);
     printf("oct up: 440 Hz / 220 Hz power %.1f, level %.2f\n", a / b2, rms(ol, FS * 3u / 5u, FS * 7u / 5u) / rms(ol, 0, FS / 2u));
     assert(a > 30 * b2 && fabs(rms(ol, FS * 3u / 5u, FS * 7u / 5u) / rms(ol, 0, FS / 2u) - 1) < 0.25);
-    /* MONO: a left-only tone comes out on both sides */
-    sweep_hz = 440;
-    run_fx(PX_MONO, g_left, FS, FS / 4u, FS * 3u / 4u, 0);
-    for (t = FS / 4u + 128u; t < FS * 3u / 4u; t++) assert(abs(ol[t] - or_[t]) <= 64);   /* (the wet gain tops at 4095 / 4096) */
-    assert(rms(or_, FS / 4u + 128u, FS * 3u / 4u) > 0.4 * rms(ol, 0, FS / 4u));
-    /* AUTO-PAN: once a beat the mix goes left, then right */
-    run_fx(PX_PAN, g_sine, FS * 2u, FS / 2u, FS * 3u / 2u, 0);
+    /* (Rheia) VOID: the burst's reverb rings on alone and decays, nothing new fed into it (the dry gone at once) */
+    run_send = 1;                                     /* (the burst into the reverb, as a mix with REV sends) */
+    run_fx(PX_VOID, g_burst, FS * 4u, FS / 5u, FS * 4u, 0);
+    run_send = 0;
     {
-        uint32_t lw = 0, rw = 0, q = beat / 8u;
-        for (t = FS / 2u; t + q < FS * 3u / 2u; t += q) {
-            double el = rms(ol, t, t + q), er = rms(or_, t, t + q);
-            lw += el > 4 * er, rw += er > 4 * el;
+        double dry = rms(ol, FS / 10u, FS / 5u), v1 = rms(ol, FS / 5u + 2000u, FS * 2u / 5u), v2 = rms(ol, FS * 3u, FS * 4u);
+        printf("void: the dry %.0f, the tail %.0f just after, %.1f 3 s on\n", dry, v1, v2);
+        assert(v1 < 0.6 * dry && v1 > 0.005 * dry && v2 < 0.05 * v1);
+    }
+    /* (Rheia) BLAST-IN: the last eighth again and again, shorter each beat: the repeats' starts get closer (a burst of
+     * noise every repeat: count the onsets in each beat) */
+    sweep_hz = 97;
+    run_fx(PX_BLASTIN, g_burst, FS * 2u, FS / 4u, FS * 7u / 4u, 0);
+    {   /* each stage repeats exactly at its length (after its first repeat): an eighth, a sixteenth, a 32nd */
+        uint32_t on = FS / 4u, L0 = beat / 2u, st, bad[3] = {0, 0, 0};
+        for (st = 0; st < 3u; st++) {
+            uint32_t L = L0 >> st, a0 = on + st * beat + (st ? L : 0u) + 128u;   /* (an eighth: the stage holds two) */
+            for (t = a0; t < a0 + L - 256u; t++)
+                bad[st] += abs(ol[t] - ol[t + L]) > 40;   /* (the dry under a full wet: 1 / 4096 of it, while it plays) */
         }
-        printf("auto-pan: %u eighths of a beat hard left, %u hard right (of 16)\n", lw, rw);
-        assert(lw >= 3 && rw >= 3);
-        assert(fabs(rms(ol, FS / 2u, FS * 3u / 2u) / rms(ol, 0, FS / 2u) - 1) < 0.2);   /* as loud overall */
+        printf("blast-in: samples off the repeat in each stage %u, %u, %u (an eighth, a sixteenth, a 32nd)\n", bad[0], bad[1], bad[2]);
+        assert(!bad[0] && !bad[1] && !bad[2] && rms(ol, on + 2u * beat, on + 3u * beat) > 0.2 * rms(ol, FS / 10u, FS / 5u));
+    }
+    /* (Rheia) COLLAPSE: a 440 Hz tone sinks an octave in a beat and stays there */
+    sweep_hz = 440;
+    run_fx(PX_COLLAPSE, g_sine, FS * 2u, FS / 2u, FS * 2u, 0);
+    a = tone_pow(ol, FS / 2u + beat + beat / 4u, FS / 2u + 2u * beat, 220), b2 = tone_pow(ol, FS / 2u + beat + beat / 4u, FS / 2u + 2u * beat, 440);
+    printf("collapse: after a beat 220 Hz / 440 Hz power %.1f\n", a / b2);
+    assert(a > 10 * b2);
+    /* (Rheia) WALL-UP: a quiet tone comes out much louder and square (odd harmonics), bounded */
+    {
+        static int32_t q[CTL * 2u];
+        double r0, r1, h3;
+        (void)q;
+        sweep_hz = 220;
+        run_fx(PX_WALLUP, g_sine, FS, FS / 4u, FS * 3u / 4u, 0);
+        r0 = rms(ol, FS / 20u, FS / 5u), r1 = rms(ol, FS / 4u + 500u, FS * 3u / 4u);
+        h3 = tone_pow(ol, FS / 4u + 500u, FS * 3u / 4u, 660) / tone_pow(ol, FS / 4u + 500u, FS * 3u / 4u, 220);
+        printf("wall-up: level %.2f of the dry, 3rd harmonic %.3f\n", r1 / r0, h3);
+        assert(h3 > 0.02 && r1 < 2.0 * r0 && r1 > 0.3 * r0);
     }
     /* FADE OUT: a quarter at one beat (squared), nothing at two */
     run_fx(PX_FADE, g_sine, FS * 3u, FS / 2u, FS * 5u / 2u, 0);
@@ -214,7 +241,7 @@ static void punch_new_fx(void)
             punch.req = PX_KLOW;
             punch_process(L, R, CTL);
         }
-        punch.req = PX_MONO;
+        punch.req = PX_WALLUP;                         /* (Rheia: MONO was here) */
         for (bk = 0; bk < 2u; bk++) {
             for (k = 0; k < CTL; k++) L[k] = R[k] = (int32_t)(150000.0 * sin(2 * M_PI * 80 * (bk * CTL + k) / FS));
             punch_process(L, R, CTL);
@@ -225,13 +252,14 @@ static void punch_new_fx(void)
             punch_process(L, R, CTL);
             for (k = 0; k < CTL; k++) mx = abs(L[k]) > mx ? abs(L[k]) : mx;
         }
-        printf("quick switch KILL LOW -> MONO -> KILL MID over silence: peak %d\n", mx);
+        printf("quick switch KILL LOW -> WALL-UP -> KILL MID over silence: peak %d\n", mx);
         assert(mx == 0);
         punch.req = -1;
         for (bk = 0; bk < 4u; bk++) punch_process(L, R, CTL);
     }
     song.playing = 0;
-    printf("black keys: KILL LOW / MID / HIGH, REWIND, OCT UP, FLANGER, AUTO-PAN, FREEZE, LOOP 8T, MONO, FADE OUT do what they say PASS\n");
+    printf("black keys: KILL LOW / MID / HIGH, REWIND, OCT UP, FLANGER, BLAST-IN, FREEZE, LOOP 8T, VOID, FADE OUT, and (Rheia) "
+           "WALL-UP, COLLAPSE do what they say PASS\n");
 }
 
 /* (2.7.2) GLO > MASTER 2 > FADE: the wet gain ramps in / out faster or slower. The blocks to reach full wet when an

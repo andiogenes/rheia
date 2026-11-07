@@ -2,7 +2,13 @@
 > on the drum track's DRUMS screen that writes blast beats (traditional, hammer, bomb), skank beats, D-beats,
 > half-time stomps, sludge crawls and tom marches, with fills, 32nd-note kick doubles and humanising.
 > Try it in the browser with the [emulator](https://andiogenes.github.io/rheia/webapp/emulator/), install it with the
-> [installer](https://andiogenes.github.io/rheia/webapp/installer/). Everything below is SLOOP's own documentation.
+> [installer](https://andiogenes.github.io/rheia/webapp/installer/).
+>
+> Rheia also adds WALL (BUZZ, SLAB and SHRED INSERT voicings with a gate), TREM (an arp mode for tremolo picking),
+> DRONE (ARP 2 > HOLD: a pedal note), FDBK (a feedback howl in the NOISE engine), ROT (tape wear, GLO > MASTER 2),
+> section tempo x1/2 / x2 (SONG screen, PRESETS), the BLAST, MACHINE and SPAZZ kits and heavy factory sounds. Four
+> punch-ins replace SLOOP's at the same keys: **WALL-UP** (PHONE's), **COLLAPSE** (ALIAS's), **BLAST-IN** (AUTO-PAN's)
+> and **VOID** (MONO's). Everything below is SLOOP's own documentation.
 
 <p align="center"><img src="assets/logo/sloop-logo.png" alt="SLOOP" width="420"></p>
 
