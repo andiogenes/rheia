@@ -91,7 +91,9 @@ jobs:
 
       - name: The full SLOOP host suite (informational)
         continue-on-error: true
-        run: sh tests/run_tests.sh
+        run: |
+          cp "build/felucca-$RHEIA_VERSION.fwsc" build/felucca.fwsc   # (the suite reads the package by this name)
+          sh tests/run_tests.sh
 
       - name: Make the site
         run: |
