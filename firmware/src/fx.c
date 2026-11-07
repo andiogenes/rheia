@@ -900,7 +900,7 @@ static struct {
     uint32_t wp, wow, flu;                              /* write position, the two phases */
     int32_t rnd, g, drop, low, lpl, lpr, mix;           /* noise; gain Q15; samples of dropout left, its floor; low-passes;
                                                          * the wet share, Q15 */
-} rot = {.rnd = 0x51A3C0DE, .g = 32767};
+} rot;                                                  /* (zero: in .bss, not 4 KiB of flash; set up when it starts) */
 static void rot_process(int32_t *l, int32_t *r, uint32_t n)
 {
     int32_t a = clamp(song.g[G_ROT], 0, 127), tmix = a ? 32767 : 0, k, wd, fd, pc, i;
@@ -910,6 +910,8 @@ static void rot_process(int32_t *l, int32_t *r, uint32_t n)
         memset(rot.l, 0, sizeof rot.l);
         memset(rot.r, 0, sizeof rot.r);
         rot.g = 32767, rot.drop = 0, rot.lpl = rot.lpr = 0;
+        if (!rot.rnd)
+            rot.rnd = 0x51A3C0DE;                       /* (xorshift: never 0) */
     }
     k = 32767 - a * 200;                                /* tape loss: one-pole, Q15 (open .. ~5 kHz) */
     wd = a * 343;                                       /* wow depth, Q8 samples: up to 170 (3.9 ms: +-25 cents at 0.6 Hz) */
