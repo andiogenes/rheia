@@ -18,10 +18,10 @@
     --lit: #ffffff;
     --dim: #55555e;
     --accent: #ff6a2a;
-    --k1: #2f7dff;
-    --k2: #2fbf71;
-    --k3: #f2c12e;
-    --k4: #ff6a2a;
+    --k1: var(--dev-t1, #2f7dff);
+    --k2: var(--dev-t2, #2fbf71);
+    --k3: var(--dev-t3, #f2c12e);
+    --k4: var(--dev-t4, #ff6a2a);
     --white-key: #e8e8ea;
     --black-key: #18181b;
     --kw: 42px;
@@ -42,7 +42,11 @@
   nav a:hover { color: var(--ink); }
   #status { color: var(--muted); font-size: 13px; }
 
-  .device {
+  .device {                                   /* (Rheia) the FM-1 is dark in both modes: the theme's dark colours */
+    --ink: var(--dev-ink, #e9e9ee);
+    --muted: var(--dev-muted, #8a8a94);
+    --accent: var(--dev-accent, #ff6a2a);
+    color: var(--ink);
     position: relative;
     max-width: 760px;
     margin: 0 auto;
@@ -143,7 +147,7 @@
   footer h2 { color: var(--ink); font-size: 15px; margin: 18px 0 6px; }
   footer table { border-collapse: collapse; }
   footer td { padding: 2px 14px 2px 0; vertical-align: top; }
-  kbd { font: 12px ui-monospace, monospace; background: #24242a; border: 1px solid #34343c; border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+  kbd { font: 12px ui-monospace, monospace; background: var(--card, #24242a); border: 1px solid var(--edge, #34343c); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
   footer a { color: var(--ink); }
 
   @media (max-width: 720px) {
@@ -155,10 +159,12 @@
     :root { --kw: 36px; --bw: 22px; }
   }
 </style>
+<!--THEME-->
 </head>
 <body>
 <header>
   <h1>Rheia<small>emulator</small></h1>
+  <div data-theme-picker></div>
   <nav><a href="../installer/">Installer</a><a href="../editor/">Editor</a><a href="https://github.com/andiogenes/rheia">Source</a></nav>
 </header>
 

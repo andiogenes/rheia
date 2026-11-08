@@ -55,5 +55,14 @@ peak = 0; frames(30);
 ok(peak < 0.001, "PLAY again: stopped, the tails gone");
 const leds = Array.from({ length: 41 }, (_, i) => e.emu_led(i));
 ok(leds.every((v) => v >= 0 && v <= 3), "the lights: 41, each 0..3");
+// (Rheia) the page's theme picker: emu_palette puts the screen in that palette (the background: the most common colour)
+const rgb565 = (r, g, b) => { const c = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3); return ((c >> 8) | (c << 8)) & 0xFFFF; };
+const commonest = () => { const n = new Map(); for (const v of screen()) n.set(v, (n.get(v) || 0) + 1); return [...n].sort((a, b) => b[1] - a[1])[0][0]; };
+const ashBg = commonest();
+e.emu_palette(9); e.emu_frame(16); e.emu_frame(17);
+const gazeBg = commonest();
+e.emu_palette(99); e.emu_frame(16);
+ok(ashBg === rgb565(12, 11, 10) && gazeBg === rgb565(20, 14, 30) && commonest() === gazeBg,
+   "theme: starts on ASH; emu_palette(9): GAZE's background; a palette that is not there: no change");
 console.log(failed ? `emu: ${failed} FAILED` : "emu: all passed");
 process.exit(failed ? 1 : 0);

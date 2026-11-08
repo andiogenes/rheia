@@ -22,11 +22,14 @@ class RheiaEmu extends AudioWorkletProcessor {
     if (m.type === 'wasm') {
       const { instance } = await WebAssembly.instantiate(m.bytes, {});
       this.e = instance.exports;
+      if (m.palette != null) this.e.emu_palette(m.palette);   // (the page's theme: the boot screen in it too)
       this.e.emu_init();
       this.n = this.e.emu_frames();
       this.btnIds = Array.from({ length: 14 }, (_, b) => this.e.emu_btn_id(b));
       this.port.postMessage({ type: 'ready', rate: this.e.emu_rate(), btnIds: this.btnIds });
       this.post();
+    } else if (m.type === 'palette') {
+      if (this.e) this.e.emu_palette(m.id);
     } else {
       this.queue.push(m);
     }

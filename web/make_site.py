@@ -36,6 +36,92 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 THEMES = ("ash", "frost", "rust", "blood", "gaze")         # (Rheia) firmware/src/gfx.c PALETTES from PAL_RHEIA
 SCREENS = ("boot", "tracks", "gen", "song", "about")
+GFX = HERE.parent / "firmware" / "src" / "gfx.c"
+
+
+# ---- (Rheia) the site's colours, from the firmware's themes (web/theme.js puts them on the pages)
+def rheia_palettes():
+    """The Rheia themes in gfx.c PALETTES (after SLOOP's five): name, palette number, c[5], bg, hi, trk[4] (8-bit RGB)."""
+    src = GFX.read_text(encoding="utf-8")
+    body = src[src.index("static const palette_t PALETTES[]"):src.index("#define PAL_RHEIA")]
+    rgb = r"RGB\((\d+),\s*(\d+),\s*(\d+)\)"
+    names = re.findall(r'\{"([A-Z]+)",', body)
+    first = int(re.search(r"#define PAL_RHEIA (\d+)u", src).group(1))
+    out = []
+    for i, name in enumerate(names):
+        if i < first:
+            continue
+        entry = body[body.index('{"' + name + '"'):]
+        entry = entry[:entry.index("}},") + 2]
+        cols = [tuple(int(v) for v in m) for m in re.findall(rgb, entry)]
+        if len(cols) != 11:
+            raise SystemExit(f"gfx.c: theme {name}: {len(cols)} colours, want 11 (c[5], bg, hi, trk[4])")
+        out.append({"name": name, "index": i, "c": cols[:5], "bg": cols[5], "hi": cols[6], "trk": cols[7:]})
+    return out
+
+
+def lum(c):
+    ch = [v / 255 for v in c]
+    ch = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in ch]
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+
+
+def contrast(a, b):
+    x, y = sorted((lum(a), lum(b)), reverse=True)
+    return (x + 0.05) / (y + 0.05)
+
+
+def mix(a, b, t):
+    return tuple(round(a[k] + (b[k] - a[k]) * t) for k in range(3))
+
+
+def ensure(fg, bgs, ratio, to):
+    """fg moved toward `to` (black or white) in small steps until it stands out from every colour in bgs by ratio"""
+    for i in range(101):
+        c = mix(fg, to, i / 100)
+        if all(contrast(c, b) >= ratio for b in bgs):
+            return c
+    return to
+
+
+RED = (255, 44, 52)                                  # the recording red (ui_studio.c TE_RED)
+
+
+def theme_tokens(p):
+    """the page's colours for one theme: dark (the FM-1's own) and light (the same hues on a pale ground)"""
+    W, K = (255, 255, 255), (0, 0, 0)
+    c, bg = p["c"], p["bg"]
+    hx = lambda v: "#%02x%02x%02x" % v                                     # noqa: E731
+    d_card = mix(bg, c[0], 0.55)
+    dark = {"bg": bg, "card": d_card, "edge": mix(bg, c[1], 0.8), "ink": ensure(c[4], [bg, d_card], 7, W),
+            "muted": ensure(c[2], [bg, d_card], 4.5, W), "accent": ensure(p["hi"], [bg, d_card], 4.5, W),
+            "red": ensure(RED, [bg, d_card], 3, W)}
+    dark.update({f"t{k + 1}": ensure(t, [bg, d_card], 3, W) for k, t in enumerate(p["trk"])})
+    l_bg, l_card = mix(W, c[4], 0.3), mix(W, c[4], 0.1)
+    light = {"bg": l_bg, "card": l_card, "edge": mix(l_bg, c[2], 0.45), "ink": ensure(bg, [l_bg, l_card], 7, K),
+             "muted": ensure(c[2], [l_bg, l_card], 4.5, K), "accent": ensure(p["trk"][3], [l_bg, l_card], 4.5, K),
+             "red": ensure(RED, [l_bg, l_card], 3, K)}
+    light.update({f"t{k + 1}": ensure(t, [l_bg, l_card], 3, K) for k, t in enumerate(p["trk"])})
+    return {m: {k: hx(v) for k, v in d.items()} for m, d in (("dark", dark), ("light", light))}
+
+
+def theme_script():
+    """web/theme.js with the themes' colours, as an inline <script> for a page's <head>"""
+    js = (HERE / "theme.js").read_text(encoding="utf-8")
+    themes = [{"name": p["name"], "index": p["index"], **theme_tokens(p)} for p in rheia_palettes()]
+    js = re.sub(r"/\*THEMES\*/.*?/\*/THEMES\*/", lambda m: json.dumps(themes, separators=(",", ":")), js,
+                count=1, flags=re.S)
+    if "</script" in js:
+        raise SystemExit("theme.js must not contain </script")
+    return "<script>\n" + js + "</script>"
+
+
+def put_theme(path):
+    """a page's <!--THEME--> mark: the theme script"""
+    html = path.read_text(encoding="utf-8")
+    if html.count("<!--THEME-->") != 1:
+        raise SystemExit(f"{path.name} must contain <!--THEME--> once (in <head>); update make_site.py")
+    path.write_text(html.replace("<!--THEME-->", theme_script()), encoding="utf-8")
 ONLINE = "https://andiogenes.github.io/rheia/"          # (Rheia: its own site)                 # (the offline editor's links)
 
 
@@ -126,6 +212,7 @@ def theme_gallery(out):
         rows.append(f'<section><h2>{t.upper()}</h2><div class="row">{"".join(imgs)}</div></section>')
     (dst / "index.html").write_text((HERE / "themes.html").read_text(encoding="utf-8")
                                     .replace("<!--THEMES-->", "\n".join(rows)), encoding="utf-8")
+    put_theme(dst / "index.html")
     return True
 
 
@@ -198,11 +285,13 @@ def main(pkg, version, out):
         shutil.rmtree(emu_out)                     # never serve an old emulator as the current one
     if (emu_src / "rheia-emu.wasm").exists():
         shutil.copytree(emu_src, emu_out)
+        put_theme(emu_out / "index.html")
     app_files(out, version, name)
     landing = (HERE / "landing.html").read_text(encoding="utf-8").replace("<!--VERSION-->", version)
     card = ('<a class="card" href="themes/"><b>Themes</b><span>ASH, FROST, RUST, BLOOD and GAZE on the FM-1\'s '
             'screen, as the firmware draws them.</span></a>')
     (out / "index.html").write_text(landing.replace("<!--THEMES-->", card if theme_gallery(out) else ""), encoding="utf-8")
+    put_theme(out / "index.html")
     print(f"site: {out}: webapp/installer ({len(html)} B), webapp/editor, firmware/{name} ({len(raw)} B, {product})")
 
 

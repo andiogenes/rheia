@@ -5,6 +5,7 @@ site without internet (webapp/sw.js, the manifest): what sw.js keeps is all ther
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -80,6 +81,35 @@ try:
         check("(Rheia) no screens drawn (build/host/ui): no themes/, no link to it",
               not (tmp / "site" / "themes").exists() and 'href="themes/"' not in landing)
     check("(Rheia) the landing page: no marker left", "<!--" + "THEMES-->" not in landing and "<!--VERSION-->" not in landing)
+    # (Rheia) the site's colours: the firmware's themes, dark and light, legible; the script in each page
+    themes = [dict(p, **make_site.theme_tokens(p)) for p in make_site.rheia_palettes()]
+    check("(Rheia) the site's themes are the FM-1's: ASH FROST RUST BLOOD GAZE, palettes 5..9 (gfx.c)",
+          [t["name"] for t in themes] == ["ASH", "FROST", "RUST", "BLOOD", "GAZE"] and
+          [t["index"] for t in themes] == list(range(5, 10)))
+    rgb = lambda h: tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))       # noqa: E731
+    worst = []
+    for t in themes:
+        for m in ("dark", "light"):
+            c = {k: rgb(v) for k, v in t[m].items()}
+            for k, need in [("ink", 7), ("muted", 4.5), ("accent", 4.5), ("t1", 3), ("t2", 3), ("t3", 3),
+                            ("t4", 3), ("red", 3)]:
+                r = min(make_site.contrast(c[k], c["bg"]), make_site.contrast(c[k], c["card"]))
+                if r < need:
+                    worst.append(f"{t['name']} {m} {k} {r:.2f}")
+    check("(Rheia) every theme, dark and light: text 7:1, labels and links 4.5:1, tracks and red 3:1 " +
+          ("; ".join(worst) or ""), not worst)
+    pages = [tmp / "site" / "index.html"] + [f for f in (tmp / "site" / "themes" / "index.html",
+                                                          app / "emulator" / "index.html") if f.exists()]
+    ok = True
+    for f in pages:
+        h = f.read_text(encoding="utf-8")
+        ok &= "<!--THEME-->" not in h and "/*THEMES*/" not in h and "window.rheiaTheme" in h and \
+            h.index("window.rheiaTheme") < h.index("</head>") and "data-theme-picker" in h
+        if shutil.which("node"):
+            js = h[h.rindex("<script>", 0, h.index("window.rheiaTheme")) + 8:h.index("</script>", h.index("window.rheiaTheme"))]
+            (tmp / "t.js").write_text(js, encoding="utf-8")
+            ok &= subprocess.run(["node", "--check", str(tmp / "t.js")], capture_output=True).returncode == 0
+    check(f"(Rheia) the theme script in <head> and a picker: {', '.join(str(f.relative_to(tmp / 'site')) for f in pages)}", ok)
     stamp = sw.split('const STAMP = "')[1].split('"')[0]
     (tmp / "site2").mkdir()
     make_site.main(tmp / "p.fwsc", "9.9", tmp / "site2")

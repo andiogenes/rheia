@@ -23,6 +23,10 @@ const latched = new Set();
 
 function send(m) { if (node) node.port.postMessage(m); }
 
+// (Rheia) the page's theme (theme.js, put in by web/make_site.py): the FM-1's screen takes the same palette
+const themePalette = () => (window.rheiaTheme ? window.rheiaTheme.current().index : null);
+window.addEventListener('rheia-theme', (ev) => send({ type: 'palette', id: ev.detail.index }));
+
 // ---- the panel
 function makeButton(name, parent) {
   const b = document.createElement('button');
@@ -196,7 +200,7 @@ async function powerOn() {
       }
     };
     const bytes = await (await fetch('rheia-emu.wasm')).arrayBuffer();
-    node.port.postMessage({ type: 'wasm', bytes }, [bytes]);
+    node.port.postMessage({ type: 'wasm', bytes, palette: themePalette() }, [bytes]);
     await ctx.resume();
   } catch (err) {
     $('#power').textContent = 'Could not start';

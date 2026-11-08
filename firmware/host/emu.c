@@ -188,6 +188,7 @@ void emu_init(void)
     song.master_q12 = 2048;
     song.g[G_SYNC] = 0;
     layers_init();
+    settings_init();                              /* (Rheia) the palette: emu_palette's, or a new FM-1's (ASH) */
     sloop_splash();
     go_home();
     ui.force = 1;
@@ -226,6 +227,17 @@ void emu_frame(uint32_t ms)
     ui_draw();
 }
 uint16_t *emu_screen(void) { return screen; }
+/* (Rheia) the screen's palette (gfx.c PALETTES; the page's theme picker): before emu_init, the boot screen's too */
+void emu_palette(uint32_t i)
+{
+    if (i >= NPALETTES)
+        return;
+    settings.magic = SETTINGS_MAGIC;
+    settings.palette = (uint8_t)i;
+    theme_on = 0;
+    palette_set(i);
+    ui.force = 1;
+}
 /* a light by matrix id (buttons: emu_btn_id; key k: 14 + k): 0 off, 1 background, 2 dim, 3 lit */
 uint32_t emu_led(uint32_t id)
 {

@@ -23,7 +23,12 @@
   .card.primary b { color: var(--accent); }
   footer { color: var(--muted); font-size: 13px; margin-top: 40px; }
   footer a { color: var(--ink); }
+  .theme { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: var(--muted); font-size: 13px; }
+  a.card { border-top: 3px solid var(--c, var(--edge)); }
+  .cards > :nth-child(4n + 1) { --c: var(--t1); } .cards > :nth-child(4n + 2) { --c: var(--t2); }
+  .cards > :nth-child(4n + 3) { --c: var(--t3); } .cards > :nth-child(4n + 4) { --c: var(--t4); }
 </style>
+<!--THEME-->
 </head>
 <body>
 <main>
@@ -36,6 +41,7 @@
     <a class="card" href="webapp/editor/"><b>Editor</b><span>Sounds, patterns, samples and backups from the computer.</span></a>
     <!--THEMES-->
   </div>
+  <div class="theme"><span>Theme (as on the FM-1, MENU &gt; COLOR):</span><div data-theme-picker></div></div>
   <footer>
     <p>A beta: install at your own risk. Free software (GPL-3.0) — <a href="https://github.com/andiogenes/rheia">source</a>.
     Based on <a href="https://github.com/isod89/sloop-fm1">SLOOP</a> and <a href="https://github.com/hugelton/Felucca">Felucca</a>.

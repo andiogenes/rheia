@@ -15,7 +15,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 GEN = ROOT / 'build/gen'
-EXPORTS = ['init', 'button', 'enc', 'key', 'frame', 'screen', 'led', 'frames', 'rate', 'btn_id', 'render']
+EXPORTS = ['init', 'button', 'enc', 'key', 'frame', 'screen', 'led', 'frames', 'rate', 'btn_id', 'render', 'palette']
 FLAGS = ['-O2', '-fwrapv', '-fno-strict-aliasing', '-w', '-I' + str(GEN), '-I' + str(ROOT / 'firmware/src'),
          '-I' + str(ROOT / 'firmware/host')]
 
