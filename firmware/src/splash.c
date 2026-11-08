@@ -3,8 +3,8 @@
 #ifndef UI_SMALL                 /* (2.7) compiled for size: not the audio path (gfx.c UI_SMALL); the host tests: nothing */
 #define UI_SMALL
 #endif
-/* (Rheia) the boot screen: RHEIA in the font's large letters made three times as big (R white, H E I A the four
- * tracks' colours), the version, where it comes from. SLOOP's own logo above stays SLOOP's (not drawn). */
+/* (Rheia) the boot screen: RHEIA in the font's large letters made three times as big (R the accent, H E I A the four
+ * tracks' colours), the version, where it comes from -- all in the chosen theme (settings_init sets it first). SLOOP's own logo above stays SLOOP's (not drawn). */
 UI_SMALL static void rheia_logo_draw(uint32_t y0)
 {
     static const char L[5] = {'R', 'H', 'E', 'I', 'A'};
@@ -14,7 +14,7 @@ UI_SMALL static void rheia_logo_draw(uint32_t y0)
     cv_begin(240, h * k, C_BLACK);
     for (i = 0; i < 5u; i++) {
         c[0] = L[i];
-        px = cv_text(px, 0, &FONT_L, c, i ? TE_COL_DEF[i - 1u] : C_WHITE);
+        px = cv_text(px, 0, &FONT_L, c, i ? TE_COL[i - 1u] : C_WHITE);
     }
     off = (240u - w * k) / 2u;
     for (y = h * k; y-- > 0;)                           /* k times as big, in place (from the end) */
@@ -33,7 +33,7 @@ UI_SMALL static void sloop_splash(void)
     if (v[0] == 'R' && v[1] == 'H' && v[5] == ' ')
         v += 6;                                         /* "RHEIA DEV" -> "DEV" under the name */
     cv_begin(240, 36, C_BLACK);
-    cv_text(120 - text_w(&FONT_S, v) / 2, 0, &FONT_S, v, RGB(196, 196, 204));
-    cv_text(120 - text_w(&FONT_S, "based on sloop + felucca") / 2, 18, &FONT_S, "based on sloop + felucca", RGB(96, 96, 104));
+    cv_text(120 - text_w(&FONT_S, v) / 2, 0, &FONT_S, v, C_AMB);
+    cv_text(120 - text_w(&FONT_S, "based on sloop + felucca") / 2, 18, &FONT_S, "based on sloop + felucca", C_GRAY);
     cv_blit(0, 202);
 }

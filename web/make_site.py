@@ -11,6 +11,8 @@
                               its links to the installer and the font licence online; opened from the disk in
                               Chrome / Edge (file:// is a secure context: Web MIDI asks for permission)
   webapp/emulator/            (Rheia) the emulator, when build/emu has it (tools/build_emu.py)
+  themes/                     (Rheia) the themes' screens as the firmware draws them, when build/host/ui has them
+                              (tests/ui_pages_test.c theme-NAME-SCREEN.ppm; PNG with Pillow)
   webapp/sw.js, webapp/sloop.webmanifest, webapp/icon-*.png  the site without internet (SLOOP 2.6): an app to
                               install; opened once online, the installer, the editor and the firmware are kept
                               by the browser and work offline, still on https (on Android a downloaded file opens
@@ -32,6 +34,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+THEMES = ("ash", "frost", "rust", "blood", "gaze")         # (Rheia) firmware/src/gfx.c PALETTES from PAL_RHEIA
+SCREENS = ("boot", "tracks", "gen", "song", "about")
 ONLINE = "https://andiogenes.github.io/rheia/"          # (Rheia: its own site)                 # (the offline editor's links)
 
 
@@ -98,6 +102,31 @@ def app_files(out, version, fw_name):
     return sorted(keep)
 BLOCKS, BLK, KEEP = 20, 0x30, 0x2F
 RHEIA_LOGO = '<span style="font:700 40px/1 system-ui,sans-serif;letter-spacing:.04em">RHEIA</span>'
+
+
+def theme_gallery(out):
+    """(Rheia) themes/: each Rheia theme's screens, drawn by the firmware itself on the host (ui_pages_test)."""
+    src, dst = HERE.parent / "build" / "host" / "ui", out / "themes"
+    if dst.exists():
+        shutil.rmtree(dst)                         # never show old screens as the current ones
+    if not all((src / f"theme-{t}-{k}.ppm").exists() for t in THEMES for k in SCREENS):
+        return False
+    try:
+        from PIL import Image
+    except ImportError:
+        return False
+    dst.mkdir(parents=True)
+    rows = []
+    for t in THEMES:
+        imgs = []
+        for k in SCREENS:
+            Image.open(src / f"theme-{t}-{k}.ppm").save(dst / f"{t}-{k}.png", optimize=True)
+            imgs.append(f'<figure><img src="{t}-{k}.png" width="240" height="240" alt="{t.upper()}: {k}" '
+                        f'loading="lazy"><figcaption>{k.upper()}</figcaption></figure>')
+        rows.append(f'<section><h2>{t.upper()}</h2><div class="row">{"".join(imgs)}</div></section>')
+    (dst / "index.html").write_text((HERE / "themes.html").read_text(encoding="utf-8")
+                                    .replace("<!--THEMES-->", "\n".join(rows)), encoding="utf-8")
+    return True
 
 
 def strip_module(src):
@@ -170,8 +199,10 @@ def main(pkg, version, out):
     if (emu_src / "rheia-emu.wasm").exists():
         shutil.copytree(emu_src, emu_out)
     app_files(out, version, name)
-    landing = (HERE / "landing.html").read_text(encoding="utf-8")
-    (out / "index.html").write_text(landing.replace("<!--VERSION-->", version), encoding="utf-8")
+    landing = (HERE / "landing.html").read_text(encoding="utf-8").replace("<!--VERSION-->", version)
+    card = ('<a class="card" href="themes/"><b>Themes</b><span>ASH, FROST, RUST, BLOOD and GAZE on the FM-1\'s '
+            'screen, as the firmware draws them.</span></a>')
+    (out / "index.html").write_text(landing.replace("<!--THEMES-->", card if theme_gallery(out) else ""), encoding="utf-8")
     print(f"site: {out}: webapp/installer ({len(html)} B), webapp/editor, firmware/{name} ({len(raw)} B, {product})")
 
 

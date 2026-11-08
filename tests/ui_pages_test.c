@@ -162,7 +162,7 @@ static double th_cr(uint32_t a, uint32_t b)
 }
 static void rheia_themes_test(void)
 {
-    uint32_t p, k, ok = 1, applied = 1;
+    uint32_t p, k, ok = 1, applied = 1, boot_bg = 1;
     char what[200], nm[16];
     for (p = PAL_RHEIA; p < NPALETTES; p++) {
         const palette_t *q = &PALETTES[p];
@@ -195,9 +195,15 @@ static void rheia_themes_test(void)
             snprintf(f, sizeof f, "theme-%s-gen", nm); ppm(f);
             drum_page = 0; studio_open(SC_SONG); ui.force = 1; frames(2);
             snprintf(f, sizeof f, "theme-%s-song", nm); ppm(f);
-            song.sel = 0; go_home(); ui.force = 1; frames(2);
+            snprintf(f, sizeof f, "theme-%s-boot", nm);
+            sloop_splash(); ppm(f);
+            boot_bg &= screen[0] == swap16(q->bg) && screen[239u * 240u] == swap16(q->bg);
+            ui.menu = 2; ui.force = 1; frames(2);
+            snprintf(f, sizeof f, "theme-%s-about", nm); ppm(f);
+            ui.menu = 0; song.sel = 0; go_home(); ui.force = 1; frames(2);
         }
     }
+    check(boot_bg, "Rheia themes: the boot screen and ABOUT drawn in the theme (its background)");
     check(applied, "Rheia themes, chosen: the background, accent, the tracks' colours (and their dim shades) are theirs");
     settings.palette = 0; palette_set(0);
     check(pal_bg == 0 && pal_hi == 0xFFFFu && TE_COL[0] == TE_COL_DEF[0] && TE_MID[2] == TE_MID_DEF[2],

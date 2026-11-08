@@ -67,6 +67,19 @@ try:
         h = (app / page / "index.html").read_text(encoding="utf-8")
         check(f"{page}: links the manifest, registers ../sw.js, an install button",
               'href="../sloop.webmanifest"' in h and 'register("../sw.js")' in h and "beforeinstallprompt" in h)
+    landing = (tmp / "site" / "index.html").read_text(encoding="utf-8")
+    shots = make_site.HERE.parent / "build" / "host" / "ui"
+    if all((shots / f"theme-{t}-{k}.ppm").exists() for t in make_site.THEMES for k in make_site.SCREENS):
+        g = (tmp / "site" / "themes" / "index.html").read_text(encoding="utf-8")
+        imgs = re.findall(r'src="([^"]+\.png)"', g)
+        check("(Rheia) themes/: every theme's screens, each image there, linked from the landing page",
+              len(imgs) == len(make_site.THEMES) * len(make_site.SCREENS) and
+              all((tmp / "site" / "themes" / i).is_file() for i in imgs) and 'href="themes/"' in landing and
+              "<!--" + "THEMES-->" not in g)
+    else:
+        check("(Rheia) no screens drawn (build/host/ui): no themes/, no link to it",
+              not (tmp / "site" / "themes").exists() and 'href="themes/"' not in landing)
+    check("(Rheia) the landing page: no marker left", "<!--" + "THEMES-->" not in landing and "<!--VERSION-->" not in landing)
     stamp = sw.split('const STAMP = "')[1].split('"')[0]
     (tmp / "site2").mkdir()
     make_site.main(tmp / "p.fwsc", "9.9", tmp / "site2")
