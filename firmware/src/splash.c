@@ -1,39 +1,58 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* The boot splash (Rheia: its name as text; SLOOP's logo image, tools/gen_logo.py, is no longer drawn). */
+/* The boot splash (Rheia: Bruegel's The Misanthrope as line art; SLOOP's logo image, tools/gen_logo.py, is no longer drawn). */
 #ifndef UI_SMALL                 /* (2.7) compiled for size: not the audio path (gfx.c UI_SMALL); the host tests: nothing */
 #define UI_SMALL
 #endif
-/* (Rheia) the boot screen: RHEIA in the font's large letters made three times as big (R the accent, H E I A the four
- * tracks' colours), the version, where it comes from -- all in the chosen theme (settings_init sets it first). SLOOP's own logo above stays SLOOP's (not drawn). */
-UI_SMALL static void rheia_logo_draw(uint32_t y0)
+/* (Rheia) the boot screen: Pieter Bruegel the Elder's The Misanthrope (1568, public domain) as line art
+ * (misanthrope.h, tools/gen_misanthrope.py), RHEIA where the painting has its inscription (Om dat de werelt is soe
+ * ongetru / Daer om gaen ik in de rouw), the version in the corner below -- all in the chosen theme's colours
+ * (settings_init sets it first): the man in the values' colour, the thief in track 1's, his globe in the accent, the
+ * purse in track 4's, the land and the frame in the labels'. SLOOP's own logo stays SLOOP's (not drawn). */
+#include "misanthrope.h"
+UI_SMALL static uint16_t mz_colour(uint32_t cls)
 {
-    static const char L[5] = {'R', 'H', 'E', 'I', 'A'};
-    uint32_t i, w = text_w(&FONT_L, "RHEIA"), k = w * 3u <= 232u ? 3u : 2u, h = 32u, off, y, x;
-    int32_t px = 0;
-    char c[2] = {0, 0};
-    cv_begin(240, h * k, C_BLACK);
-    for (i = 0; i < 5u; i++) {
-        c[0] = L[i];
-        px = cv_text(px, 0, &FONT_L, c, i ? TE_COL[i - 1u] : C_WHITE);
+    switch (cls) {
+    case MZ_MAN: return C_HI;
+    case MZ_THIEF: return TE_COL[0];
+    case MZ_GLOBE: return C_WHITE;
+    case MZ_PURSE: return TE_COL[3];
+    case MZ_FLOCK: return C_AMB;
+    default: return C_GRAY;                             /* the frame, the land */
     }
-    off = (240u - w * k) / 2u;
-    for (y = h * k; y-- > 0;)                           /* k times as big, in place (from the end) */
-        for (x = w * k; x-- > 0;)
-            cv_px[y * 240u + off + x] = cv_px[(y / k) * 240u + x / k];
-    for (y = 0; y < h * k; y++)
-        for (x = 0; x < off; x++)
-            cv_px[y * 240u + x] = swap16(C_BLACK);
-    cv_blit(0, y0);
+}
+#define MZ_BAND 120u                                    /* the screen in two bands of the canvas (240 x 124 at most) */
+UI_SMALL static void misanthrope_draw(void)
+{
+    uint32_t band, i, k;
+    for (band = 0; band < 2u; band++) {
+        cv_begin(240, MZ_BAND, C_BLACK);
+        cv_oy = -(int32_t)(band * MZ_BAND);
+        for (i = 0; MISANTHROPE[i] != MZ_END && i < sizeof MISANTHROPE;) {
+            const uint8_t *p = &MISANTHROPE[i];
+            uint16_t c = mz_colour(p[0]);
+            uint32_t n = p[1];
+            for (k = 1; k < n; k++)
+                cv_line(p[2u * k], p[2u * k + 1u], p[2u * k + 2u], p[2u * k + 3u], c);
+            i += 2u + 2u * n;
+        }
+        cv_oy = 0;
+        if (band) {
+            static const char L[5] = {'R', 'H', 'E', 'I', 'A'};
+            const char *v = FELUCCA_VERSION;
+            char ch[2] = {0, 0};
+            int32_t x = 120 - text_w(&FONT_S, "RHEIA") / 2;
+            for (k = 0; k < 5u; k++) {                  /* R the accent, H E I A the four tracks' colours */
+                ch[0] = L[k];
+                x = cv_text(x, 207 - (int32_t)MZ_BAND, &FONT_S, ch, k ? TE_COL[k - 1u] : C_WHITE);
+            }
+            if (v[0] == 'R' && v[1] == 'H' && v[5] == ' ')
+                v += 6;                                 /* "RHEIA DEV" -> "DEV" */
+            cv_text(238 - text_w(&FONT_S, v), 224 - (int32_t)MZ_BAND, &FONT_S, v, C_AMB);
+        }
+        cv_blit(0, band * MZ_BAND);
+    }
 }
 UI_SMALL static void sloop_splash(void)
 {
-    const char *v = FELUCCA_VERSION;
-    lcd_fill(0, 0, 240, 240, C_BLACK);
-    rheia_logo_draw(60);
-    if (v[0] == 'R' && v[1] == 'H' && v[5] == ' ')
-        v += 6;                                         /* "RHEIA DEV" -> "DEV" under the name */
-    cv_begin(240, 36, C_BLACK);
-    cv_text(120 - text_w(&FONT_S, v) / 2, 0, &FONT_S, v, C_AMB);
-    cv_text(120 - text_w(&FONT_S, "based on sloop + felucca") / 2, 18, &FONT_S, "based on sloop + felucca", C_GRAY);
-    cv_blit(0, 202);
+    misanthrope_draw();
 }

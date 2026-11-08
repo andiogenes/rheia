@@ -198,12 +198,21 @@ static void rheia_themes_test(void)
             snprintf(f, sizeof f, "theme-%s-boot", nm);
             sloop_splash(); ppm(f);
             boot_bg &= screen[0] == swap16(q->bg) && screen[239u * 240u] == swap16(q->bg);
+            {   /* (Rheia) the Misanthrope: the man in the values' colour, the thief in track 1's, the purse in 4's */
+                uint32_t nm_ = 0, nt = 0, np = 0, j;
+                for (j = 0; j < 240u * 240u; j++) {
+                    nm_ += screen[j] == swap16(pal[4]);
+                    nt += screen[j] == swap16(TE_COL[0]);
+                    np += screen[j] == swap16(TE_COL[3]);
+                }
+                boot_bg &= nm_ > 600u && nt > 300u && np > 20u;
+            }
             ui.menu = 2; ui.force = 1; frames(2);
             snprintf(f, sizeof f, "theme-%s-about", nm); ppm(f);
             ui.menu = 0; song.sel = 0; go_home(); ui.force = 1; frames(2);
         }
     }
-    check(boot_bg, "Rheia themes: the boot screen and ABOUT drawn in the theme (its background)");
+    check(boot_bg, "Rheia themes: the boot screen (Bruegel's Misanthrope: the man, the thief, the purse) and ABOUT in the theme");
     check(applied, "Rheia themes, chosen: the background, accent, the tracks' colours (and their dim shades) are theirs");
     settings.palette = 0; palette_set(0);
     check(pal_bg == 0 && pal_hi == 0xFFFFu && TE_COL[0] == TE_COL_DEF[0] && TE_MID[2] == TE_MID_DEF[2],
