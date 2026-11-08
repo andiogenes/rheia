@@ -42,6 +42,9 @@ static uint16_t pal_hi = 0xFFFFu;        /* the accent: white unless a theme say
 typedef struct {
     const char *name;
     uint16_t c[5];
+    uint8_t own;                         /* (Rheia) 1: the background, the accent and the tracks' colours below are this
+                                          * palette's own (SLOOP's five: 0, black, white and the usual four colours) */
+    uint16_t bg, hi, trk[4];
 } palette_t;
 static const palette_t PALETTES[] = {
     {"GREEN", {RGB(0, 40, 12), RGB(0, 84, 30), RGB(16, 140, 54), RGB(56, 200, 92), RGB(120, 255, 146)}},
@@ -49,7 +52,22 @@ static const palette_t PALETTES[] = {
     {"CYAN", {RGB(0, 30, 50), RGB(0, 62, 96), RGB(16, 112, 160), RGB(56, 172, 222), RGB(140, 222, 255)}},
     {"RED", {RGB(52, 8, 8), RGB(100, 18, 14), RGB(170, 36, 26), RGB(226, 64, 48), RGB(255, 112, 92)}},
     {"MONO", {RGB(40, 40, 40), RGB(80, 80, 80), RGB(130, 130, 130), RGB(186, 186, 186), RGB(226, 226, 226)}},
+    /* (Rheia) whole themes for heavy music, after SLOOP's (their numbers kept): each with its background, accent and
+     * the four tracks' colours. Every one: values 7:1 or more against the background, labels 4.5:1, the accent 4.5:1,
+     * each track and the recording red 3:1, the four tracks apart in brightness (1.25 x or more from one to the next:
+     * told apart without colour) -- tests/ui_pages_test.c checks it. ASH is a new FM-1's (panel.c settings_init) */
+    {"ASH", {RGB(46, 43, 40), RGB(84, 79, 73), RGB(150, 143, 134), RGB(200, 193, 182), RGB(236, 230, 220)}, 1,
+     RGB(12, 11, 10), RGB(246, 242, 234), {RGB(176, 206, 250), RGB(206, 150, 50), RGB(96, 140, 70), RGB(200, 36, 32)}},
+    {"FROST", {RGB(30, 40, 54), RGB(56, 74, 98), RGB(118, 144, 176), RGB(176, 200, 226), RGB(226, 240, 252)}, 1,
+     RGB(6, 9, 14), RGB(240, 248, 255), {RGB(176, 206, 250), RGB(200, 176, 96), RGB(100, 124, 156), RGB(200, 30, 56)}},
+    {"RUST", {RGB(56, 34, 20), RGB(100, 60, 32), RGB(186, 116, 66), RGB(222, 148, 86), RGB(252, 196, 140)}, 1,
+     RGB(16, 10, 6), RGB(255, 176, 64), {RGB(180, 196, 210), RGB(240, 150, 50), RGB(120, 130, 56), RGB(190, 34, 28)}},
+    {"BLOOD", {RGB(52, 14, 14), RGB(96, 24, 24), RGB(196, 96, 90), RGB(226, 132, 124), RGB(250, 196, 190)}, 1,
+     RGB(10, 4, 4), RGB(255, 86, 76), {RGB(232, 226, 214), RGB(226, 160, 50), RGB(140, 132, 132), RGB(210, 30, 30)}},
+    {"GAZE", {RGB(54, 40, 72), RGB(92, 72, 118), RGB(158, 132, 184), RGB(208, 184, 222), RGB(246, 230, 246)}, 1,
+     RGB(20, 14, 30), RGB(255, 206, 228), {RGB(200, 184, 255), RGB(80, 176, 170), RGB(210, 100, 150), RGB(190, 40, 110)}},
 };
+#define PAL_RHEIA 5u                     /* (Rheia) the first of its own: ASH */
 #define NPALETTES (sizeof(PALETTES) / sizeof(PALETTES[0]))
 static uint16_t pal[5];
 #define C_LINE pal[0]                /* 1 rules, separators */
@@ -166,16 +184,19 @@ static void palette_set(uint32_t i)              /* built-in palette i, or the t
 {
     uint32_t k;
     int cu = theme_shown();
+    const palette_t *pp = &PALETTES[i % NPALETTES];
+    int own = !cu && pp->own;                        /* (Rheia) a built-in palette with its own background and tracks */
     for (k = 0; k < 5u; k++)
-        pal[k] = cu ? theme.c[k] : PALETTES[i % NPALETTES].c[k];
-    pal_bg = cu ? theme.bg : 0u;
-    pal_hi = cu ? theme.hi : 0xFFFFu;
+        pal[k] = cu ? theme.c[k] : pp->c[k];
+    pal_bg = cu ? theme.bg : own ? pp->bg : 0u;
+    pal_hi = cu ? theme.hi : own ? pp->hi : 0xFFFFu;
     for (k = 0; k < 4u; k++)
         te_g[k] = te_gray(TE_G_DEF[k]);
     for (k = 0; k < 4u; k++) {
-        TE_COL[k] = cu ? theme.trk[k] : TE_COL_DEF[k];
-        TE_MID[k] = cu ? rgb565_scale(theme.trk[k], 2u, 3u) : TE_MID_DEF[k];
-        TE_DIM[k] = cu ? rgb565_scale(theme.trk[k], 1u, 3u) : TE_DIM_DEF[k];
+        uint16_t tc = cu ? theme.trk[k] : own ? pp->trk[k] : TE_COL_DEF[k];
+        TE_COL[k] = tc;
+        TE_MID[k] = cu || own ? rgb565_scale(tc, 2u, 3u) : TE_MID_DEF[k];
+        TE_DIM[k] = cu || own ? rgb565_scale(tc, 1u, 3u) : TE_DIM_DEF[k];
     }
 }
 

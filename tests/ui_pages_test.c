@@ -145,6 +145,71 @@ static void check(int ok, const char *what) { printf("ui: %-74s %s\n", what, ok 
 static const char *sub_line(void) { return layer_sub_shown; }   /* the layer's sub line as last drawn (ui_layers.c) */
 
 #ifndef UI_PAGES_HARNESS_ONLY                       /* (tests/stress_test.c: the harness, its own main) */
+/* (Rheia) its palettes (gfx.c PALETTES from PAL_RHEIA): readable and the tracks told apart, as the FM-1 shows them
+ * (RGB565 read back as the editor does); chosen, the background, accent and tracks are theirs; a new FM-1 starts on ASH;
+ * a gallery of screens in each (DIR/theme-NAME-SCREEN.ppm) */
+static double th_lum(uint32_t c)
+{
+    double ch[3] = {((c >> 11) & 31u) * 8 / 255.0, ((c >> 5) & 63u) * 4 / 255.0, (c & 31u) * 8 / 255.0}, w[3] = {0.2126, 0.7152, 0.0722}, l = 0;
+    for (int k = 0; k < 3; k++)
+        l += w[k] * (ch[k] <= 0.04045 ? ch[k] / 12.92 : pow((ch[k] + 0.055) / 1.055, 2.4));
+    return l;
+}
+static double th_cr(uint32_t a, uint32_t b)
+{
+    double x = th_lum(a), y = th_lum(b);
+    return ((x > y ? x : y) + 0.05) / ((x > y ? y : x) + 0.05);
+}
+static void rheia_themes_test(void)
+{
+    uint32_t p, k, ok = 1, applied = 1;
+    char what[200], nm[16];
+    for (p = PAL_RHEIA; p < NPALETTES; p++) {
+        const palette_t *q = &PALETTES[p];
+        double L[4], pair = 99, tmin = 99;
+        int good;
+        for (k = 0; k < 4u; k++) {
+            L[k] = th_lum(q->trk[k]);
+            tmin = th_cr(q->trk[k], q->bg) < tmin ? th_cr(q->trk[k], q->bg) : tmin;
+        }
+        for (k = 0; k < 4u; k++)
+            for (uint32_t j = 0; j < 4u; j++)
+                if (j != k && L[j] >= L[k] && (L[j] + 0.05) / (L[k] + 0.05) < pair)
+                    pair = (L[j] + 0.05) / (L[k] + 0.05);
+        good = q->own && th_cr(q->c[4], q->bg) >= 7 && th_cr(q->c[2], q->bg) >= 4.5 && th_cr(q->hi, q->bg) >= 4.5 &&
+               tmin >= 3 && th_cr(TE_RED, q->bg) >= 3 && pair >= 1.25;
+        snprintf(what, sizeof what, "Rheia theme %s: values %.1f, labels %.1f, accent %.1f, tracks %.1f+, red %.1f :1; tracks %.2f x apart",
+                 q->name, th_cr(q->c[4], q->bg), th_cr(q->c[2], q->bg), th_cr(q->hi, q->bg), tmin, th_cr(TE_RED, q->bg), pair);
+        check(good, what);
+        ok &= good;
+        settings.palette = p; theme_on = 0; palette_set(p);
+        applied &= pal_bg == q->bg && pal_hi == q->hi && TE_COL[0] == q->trk[0] && TE_COL[3] == q->trk[3] &&
+                   TE_DIM[1] == rgb565_scale(q->trk[1], 1u, 3u) && pal[4] == q->c[4];
+        for (k = 0; q->name[k] && k < 15u; k++) nm[k] = (char)(q->name[k] | 0x20);
+        nm[k] = 0;
+        {   /* the gallery: TRACKS, the DRUMS GEN page, the SONG screen, a menu */
+            char f[64];
+            song.sel = 0; go_home(); ui.force = 1; frames(2);
+            snprintf(f, sizeof f, "theme-%s-tracks", nm); ppm(f);
+            song.sel = TRK_DRUM; studio_open(SC_DRUM); drum_page = 3; ui.force = 1; frames(2);
+            snprintf(f, sizeof f, "theme-%s-gen", nm); ppm(f);
+            drum_page = 0; studio_open(SC_SONG); ui.force = 1; frames(2);
+            snprintf(f, sizeof f, "theme-%s-song", nm); ppm(f);
+            song.sel = 0; go_home(); ui.force = 1; frames(2);
+        }
+    }
+    check(applied, "Rheia themes, chosen: the background, accent, the tracks' colours (and their dim shades) are theirs");
+    settings.palette = 0; palette_set(0);
+    check(pal_bg == 0 && pal_hi == 0xFFFFu && TE_COL[0] == TE_COL_DEF[0] && TE_MID[2] == TE_MID_DEF[2],
+          "SLOOP's palettes: black, white and the usual four colours, as before");
+    settings.magic = 0;
+    settings_init();
+    check(settings.palette == PAL_RHEIA && !strcmp(PALETTES[settings.palette].name, "ASH"), "a new FM-1 starts on ASH");
+    settings.palette = 4; palette_set(4);
+    go_home(); ui.force = 1; frames(2);
+    (void)ok;
+}
+
 int main(int argc, char **argv)
 {
     uint32_t i;
@@ -902,12 +967,15 @@ int main(int argc, char **argv)
                       "printable name); a first-beta THM1 taken with an accent");
             ui.menu = 1; ui.menu_sel = MI_COLOR; ui.force = 1; frame();
             settings.palette = 4; theme_on = 0; palette_set(4);
-            encs[panel.enc[EN_K1]] = 1; frame();      /* no theme: MONO -> GREEN, as ever */
-            ok = settings.palette == 0u && !theme_on;
-            settings.palette = 4; palette_set(4);
+            encs[panel.enc[EN_K1]] = 1; frame();      /* (Rheia) MONO -> ASH, its themes after SLOOP's */
+            ok = settings.palette == PAL_RHEIA && !theme_on;
+            settings.palette = NPALETTES - 1u; palette_set(settings.palette);
+            encs[panel.enc[EN_K1]] = 1; frame();      /* no theme: the last (GAZE) -> GREEN, as ever */
+            ok &= settings.palette == 0u && !theme_on;
+            settings.palette = NPALETTES - 1u; palette_set(settings.palette);
             theme = th; theme_valid = 1;
-            encs[panel.enc[EN_K1]] = 1; frame();      /* MONO -> SUNSET */
-            ok &= theme_on && settings.palette == 4u && pal[0] == th.c[0] && pal[4] == th.c[4] && C_BLACK == th.bg &&
+            encs[panel.enc[EN_K1]] = 1; frame();      /* the last built-in -> SUNSET */
+            ok &= theme_on && settings.palette == NPALETTES - 1u && pal[0] == th.c[0] && pal[4] == th.c[4] && C_BLACK == th.bg &&
                   TE_COL[0] == th.trk[0] && TE_COL[3] == th.trk[3] && TE_MID[1] == rgb565_scale(th.trk[1], 2, 3) &&
                   (lights_word() >> 30 & 1u) && !strcmp(mi_value(MI_COLOR, &(uint16_t){0}), "SUNSET") && C_WHITE == th.hi;
             ui.force = 1; frame(); ppm("menu-theme");
@@ -947,7 +1015,8 @@ int main(int argc, char **argv)
             ok &= pal[4] == PALETTES[settings.palette].c[4] && strcmp(mi_value(MI_COLOR, &(uint16_t){0}), "SUNSET");
             theme_on = 0; settings.palette = pal0; palette_set(pal0);
             ui.menu_sel = MI_USB; ui.force = 1; frame();      /* (back to AUDIO) */
-            check(ok, "MENU > COLOR (2.7): your theme after MONO, by its name; its colours, background and the tracks'; bit 30");
+            check(ok, "MENU > COLOR (2.7): your theme after the built-in ones (Rheia: after GAZE), by its name; its colours, "
+                      "background and the tracks'; bit 30");
         }
         {   /* 2.7: the page counter counts the pages SELECT walks (SEQ: STEP 1/2, PATTERN 2/2; SONG not counted) */
             uint32_t n, k1, n1, k2, n2, k3 = 0, n3 = 0, menu0 = ui.menu, sel0 = ui.menu_sel;
@@ -2197,6 +2266,7 @@ int main(int argc, char **argv)
         fm1_in.buttons = 0; fm1_in.notes = 0; frames(4);
         #undef R
     }
+    rheia_themes_test();
     printf("ui: %s\n", fails ? "FAILED" : "pages, layers (punch, steps, erase, roll, key, mix), layer lock, song layer, REC hold, drums, REC, 20000-frame fuzz PASS");
     return fails;
 }
