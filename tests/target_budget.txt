@@ -7,18 +7,25 @@
 # SLOOP 2.4: FM6 (fm6_op_run, fm6_op_fb: the per-sample operator loops; fm6_render: the voice's output loop)
 # are in FUNCS without a budget yet: the engine was ported on a host without the pi32v2 toolchain; the
 # next ./build.sh + BUDGET_UPDATE=1 adds their lines (until then they print "no budget", not a failure).
-analog_render 638
+# Rheia 1.0 (reviewed): rewritten from the CI build of 1.0-beta (pi32v2 clang 4.0.1). Every number but the
+# lowered ones is what SLOOP 2.8.5 itself compiles to: the same costs in the first Rheia build, before any change to
+# the sound (sample_render +371 %, grain_render +38 %, drums_mix +11 %, fm1_alnk0_irq +54 % over the 2.0 file:
+# never rewritten upstream since); Rheia adds its DSP in functions of its own (ins_wall, rot_process). FM6 budgeted.
+analog_render 630
 digital_render 333
 phase_render 79
 lofi_render 128
-sample_render 126
+sample_render 593
 formant_render 314
 trio_render 341
 trio_pass 175
-drawbar_render 267
-drawbar_block 102
-grain_render 1734
-grain_block 138
-slicer_track 825
-drums_mix 6153
-fm1_alnk0_irq 174
+drawbar_render 271
+drawbar_block 103
+grain_render 2387
+grain_block 143
+slicer_track 832
+drums_mix 6811
+fm6_op_run 72
+fm6_op_fb 26
+fm6_render 362
+fm1_alnk0_irq 268
